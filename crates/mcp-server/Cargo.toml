@@ -1,0 +1,16 @@
+[package]
+name = "petty-mcp-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# Internal dependencies
+petty-common = { path = "../common" }
+petty-sandbox-orchestrator = { path = "../sandbox-orchestrator" }
