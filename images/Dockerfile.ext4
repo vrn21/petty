@@ -1,0 +1,30 @@
+# Dockerfile.ext4 - Converts a rootfs tarball to ext4 filesystem image
+# Uses mke2fs -d to create ext4 directly from directory (no mounting needed)
+
+FROM debian:bookworm-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    e2fsprogs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Receive the rootfs tarball as build context
+COPY rootfs.tar /rootfs.tar
+
+# Create a directory and extract the rootfs
+RUN mkdir -p /rootfs && tar -C /rootfs -xf /rootfs.tar
+
+# Build arguments for image configuration
+ARG IMAGE_SIZE=2G
+ARG IMAGE_LABEL=petty-rootfs
+
+# Create ext4 filesystem directly from directory contents
+# mke2fs -d populates the filesystem without needing to mount it
+RUN mke2fs -t ext4 -d /rootfs -L "${IMAGE_LABEL}" /rootfs.ext4 "${IMAGE_SIZE}"
+
+# Optimize: run fsck and shrink to minimum size
+RUN e2fsck -f -y /rootfs.ext4 || true
+RUN resize2fs -M /rootfs.ext4
+
+# Output stage - just the ext4 file
+FROM scratch
+COPY --from=builder /rootfs.ext4 /debian-devbox.ext4

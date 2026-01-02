@@ -1,0 +1,18 @@
+[Unit]
+Description=Petty Guest Agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/petty-agent
+Restart=always
+RestartSec=1
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening (relaxed for agent file operations)
+NoNewPrivileges=true
+# Note: ProtectSystem and ProtectHome removed - agent needs write access
+
+[Install]
+WantedBy=multi-user.target

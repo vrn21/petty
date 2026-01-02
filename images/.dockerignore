@@ -1,0 +1,19 @@
+# Ignore build artifacts
+target/
+output/
+*.ext4
+rootfs.tar
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docs
+docs/
+*.md
+!README.md

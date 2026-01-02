@@ -1,0 +1,5 @@
+# Output directory for generated rootfs images
+# This file exists to ensure the directory is tracked in git
+
+*.ext4
+*.tar
