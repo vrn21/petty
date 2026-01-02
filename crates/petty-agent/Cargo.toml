@@ -1,0 +1,24 @@
+[package]
+name = "petty-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Guest agent for petty microVMs - handles JSON-RPC commands via vsock"
+
+[[bin]]
+name = "petty-agent"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

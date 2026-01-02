@@ -2,9 +2,9 @@
 resolver = "2"
 members = [
     "crates/petty-vm",
+    "crates/petty-agent",
     # Future crates (uncomment as implemented):
     # "crates/petty-core",
-    # "crates/petty-agent",
     # "crates/petty-mcp",
     # "crates/petty-api",
     # "crates/petty-sdk",
