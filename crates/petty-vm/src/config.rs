@@ -60,10 +60,16 @@ impl MachineConfig {
             )));
         }
 
-        // Validate memory (Firecracker minimum is ~128 MiB)
+        // Validate memory (Firecracker: 128 MiB to 32 GiB)
         if self.memory_mib < 128 {
             return Err(VmError::Config(format!(
                 "memory_mib must be at least 128, got {}",
+                self.memory_mib
+            )));
+        }
+        if self.memory_mib > 32768 {
+            return Err(VmError::Config(format!(
+                "memory_mib must be at most 32768 (32 GiB), got {}",
                 self.memory_mib
             )));
         }
@@ -198,6 +204,13 @@ mod tests {
         assert!(config.validate().is_err());
 
         config.memory_mib = 128;
+        assert!(config.validate().is_ok());
+
+        // Test upper bound
+        config.memory_mib = 32769;
+        assert!(config.validate().is_err());
+
+        config.memory_mib = 32768;
         assert!(config.validate().is_ok());
     }
 

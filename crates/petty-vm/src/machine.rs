@@ -39,6 +39,17 @@ pub enum VmState {
     Stopped,
 }
 
+impl std::fmt::Display for VmState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VmState::Creating => write!(f, "creating"),
+            VmState::Running => write!(f, "running"),
+            VmState::Paused => write!(f, "paused"),
+            VmState::Stopped => write!(f, "stopped"),
+        }
+    }
+}
+
 impl VirtualMachine {
     /// Create and boot a new MicroVM with the given configuration.
     ///
