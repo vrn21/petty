@@ -216,6 +216,69 @@ impl SandboxManager {
         let sandboxes = self.sandboxes.read().await;
         sandboxes.len()
     }
+
+    // =========================================================================
+    // Direct Sandbox Operations
+    // =========================================================================
+    // These methods avoid the lifetime issues of with_sandbox_async by performing
+    // the operation directly within the lock scope.
+
+    /// Execute a shell command in a sandbox.
+    ///
+    /// This is a convenience method that avoids lifetime issues with closures.
+    pub async fn execute(
+        &self,
+        id: SandboxId,
+        command: &str,
+    ) -> Result<crate::ExecResult, CoreError> {
+        let sandboxes = self.sandboxes.read().await;
+        let sandbox = sandboxes.get(&id).ok_or(CoreError::NotFound(id))?;
+        sandbox.execute(command).await
+    }
+
+    /// Execute code in a specific language in a sandbox.
+    ///
+    /// Supported languages: python, python3, node, javascript, bash, sh
+    pub async fn execute_code(
+        &self,
+        id: SandboxId,
+        language: &str,
+        code: &str,
+    ) -> Result<crate::ExecResult, CoreError> {
+        let sandboxes = self.sandboxes.read().await;
+        let sandbox = sandboxes.get(&id).ok_or(CoreError::NotFound(id))?;
+        sandbox.execute_code(language, code).await
+    }
+
+    /// Read a file from a sandbox.
+    pub async fn read_file(&self, id: SandboxId, path: &str) -> Result<String, CoreError> {
+        let sandboxes = self.sandboxes.read().await;
+        let sandbox = sandboxes.get(&id).ok_or(CoreError::NotFound(id))?;
+        sandbox.read_file(path).await
+    }
+
+    /// Write a file to a sandbox.
+    pub async fn write_file(
+        &self,
+        id: SandboxId,
+        path: &str,
+        content: &str,
+    ) -> Result<(), CoreError> {
+        let sandboxes = self.sandboxes.read().await;
+        let sandbox = sandboxes.get(&id).ok_or(CoreError::NotFound(id))?;
+        sandbox.write_file(path, content).await
+    }
+
+    /// List directory contents in a sandbox.
+    pub async fn list_dir(
+        &self,
+        id: SandboxId,
+        path: &str,
+    ) -> Result<Vec<crate::FileEntry>, CoreError> {
+        let sandboxes = self.sandboxes.read().await;
+        let sandbox = sandboxes.get(&id).ok_or(CoreError::NotFound(id))?;
+        sandbox.list_dir(path).await
+    }
 }
 
 #[cfg(test)]

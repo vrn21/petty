@@ -4,8 +4,8 @@ members = [
     "crates/petty-vm",
     "crates/petty-agent",
     "crates/petty-core",
+    "crates/petty-mcp",
     # Future crates (uncomment as implemented):
-    # "crates/petty-mcp",
     # "crates/petty-api",
     # "crates/petty-sdk",
 ]
@@ -42,7 +42,8 @@ tower = "0.5"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # MCP
-# rust-mcp-sdk = "0.1"  # Uncomment when available
+rmcp = { version = "0.12", features = ["server", "transport-io"] }
+schemars = "0.8"
 
 # Utilities
 uuid = { version = "1.10", features = ["v4", "serde"] }
