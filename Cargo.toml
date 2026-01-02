@@ -1,6 +1,52 @@
-[package]
-name = "petty"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "2"
+members = [
+    "crates/petty-vm",
+    # Future crates (uncomment as implemented):
+    # "crates/petty-core",
+    # "crates/petty-agent",
+    # "crates/petty-mcp",
+    # "crates/petty-api",
+    # "crates/petty-sdk",
+]
 
-[dependencies]
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/vrn21/petty"
+authors = ["vrn21"]
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+
+# Firecracker
+firepilot = "1.2"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# HTTP/API
+axum = { version = "0.7", features = ["ws"] }
+tower = "0.5"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# MCP
+# rust-mcp-sdk = "0.1"  # Uncomment when available
+
+# Utilities
+uuid = { version = "1.10", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
+futures = "0.3"
+bytes = "1.7"

@@ -1,0 +1,24 @@
+[package]
+name = "petty-vm"
+description = "MicroVM management layer using firepilot for Firecracker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio.workspace = true
+firepilot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+async-trait.workspace = true
+
+# For direct Firecracker API socket communication (vsock config)
+hyper = { version = "0.14", features = ["client", "http1"] }
+hyperlocal = "0.8"
+firepilot_models = "1.3"
+
+[dev-dependencies]
+tokio-test = "0.4"
