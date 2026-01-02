@@ -23,3 +23,10 @@ config.toml
 # Test artifacts
 /test-output
 
+
+
+# Added by cargo
+#
+# already existing elements were commented out
+
+#/target

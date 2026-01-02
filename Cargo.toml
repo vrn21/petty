@@ -1,55 +1,6 @@
-[workspace]
-resolver = "2"
-members = [
-    "crates/common",
-    "crates/vm-manager",
-    "crates/agent-comms",
-    "crates/sandbox-orchestrator",
-    "crates/mcp-server",
-    "crates/in-vm-agent",
-]
-
-[workspace.package]
+[package]
+name = "petty"
 version = "0.1.0"
-edition = "2021"
-authors = ["Petty Contributors"]
-license = "MIT OR Apache-2.0"
+edition = "2024"
 
-[workspace.dependencies]
-# Async runtime
-tokio = { version = "1.42", features = ["full"] }
-tokio-util = { version = "0.7", features = ["codec", "io"] }
-futures = "0.3"
-
-# Error handling
-thiserror = "2.0"
-anyhow = "1.0"
-
-# Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-
-# Logging and tracing
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-
-# Configuration
-config = "0.14"
-toml = "0.8"
-
-# Utilities
-uuid = { version = "1.11", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
-
-# Async trait support
-async-trait = "0.1"
-
-# gRPC
-tonic = "0.12"
-prost = "0.13"
-prost-types = "0.13"
-tonic-build = "0.12"
-
-# System
-tokio-vsock = "0.6"
-base64 = "0.22"
+[dependencies]
