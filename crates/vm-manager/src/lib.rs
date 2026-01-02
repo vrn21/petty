@@ -7,6 +7,7 @@
 
 pub mod manager;
 pub mod models;
+pub mod flintlock;
 
 // Re-export main types
 pub use manager::VMManager;
