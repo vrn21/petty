@@ -73,7 +73,8 @@ rootfs: $(OUTPUT_DIR)/debian-devbox.ext4
 # Cross-compile petty-agent for Linux inside Docker (works on macOS!)
 agent: $(AGENT_BINARY)
 
-$(AGENT_BINARY): $(AGENT_SOURCES) crates/petty-agent/Cargo.toml Cargo.toml Cargo.lock
+# Always rebuild if sources change. Use .PHONY if Cargo.lock is missing.
+$(AGENT_BINARY): $(AGENT_SOURCES) crates/petty-agent/Cargo.toml Cargo.toml
 	@echo "==> Building petty-agent for $(RUST_TARGET) (via Docker)..."
 	@mkdir -p $(OUTPUT_DIR)
 	DOCKER_BUILDKIT=1 docker build \
