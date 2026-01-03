@@ -1,0 +1,33 @@
+# Build artifacts
+target/
+
+# Version control
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large generated files
+images/output/
+*.ext4
+
+# Logs
+*.log
+logs/
+
+# Test artifacts
+*.profraw
+
+# Documentation build
+docs/_build/
+
+# Node (if any)
+node_modules/

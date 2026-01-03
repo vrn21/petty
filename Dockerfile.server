@@ -1,0 +1,176 @@
+# =============================================================================
+# Dockerfile.server - Production Docker Image for petty-mcp
+# =============================================================================
+# This Dockerfile creates a production-ready image containing:
+# - petty-mcp server binary (compiled from source)
+# - Firecracker binary (downloaded from GitHub)
+# - Jailer binary (downloaded from GitHub)
+# - vmlinux kernel (downloaded from AWS S3)
+#
+# The rootfs image is NOT included - it is fetched from S3 at runtime.
+#
+# Usage:
+#   docker build -f Dockerfile.server -t petty-mcp:latest .
+#   docker run -d --privileged -p 8080:8080 \
+#     -e PETTY_ROOTFS_URL=s3://your-bucket/debian-devbox.ext4 \
+#     petty-mcp:latest
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Chef - Dependency caching for faster rebuilds
+# -----------------------------------------------------------------------------
+FROM rust:1.83-bookworm AS chef
+
+RUN cargo install cargo-chef --locked
+WORKDIR /app
+
+# -----------------------------------------------------------------------------
+# Stage 2: Planner - Generate dependency recipe
+# -----------------------------------------------------------------------------
+FROM chef AS planner
+
+# Copy only what's needed for dependency resolution
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+# Generate the recipe file for dependencies
+RUN cargo chef prepare --recipe-path recipe.json
+
+# -----------------------------------------------------------------------------
+# Stage 3: Builder - Compile dependencies and application
+# -----------------------------------------------------------------------------
+FROM chef AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the recipe and build dependencies first (cached layer)
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Now copy actual source code
+COPY Cargo.toml ./
+COPY crates ./crates
+
+# Build the actual application
+RUN cargo build --release -p petty-mcp
+
+# Strip debug symbols for smaller binary
+RUN strip /app/target/release/petty-mcp
+
+# -----------------------------------------------------------------------------
+# Stage 4: Fetcher - Download external binaries
+# -----------------------------------------------------------------------------
+FROM debian:bookworm-slim AS fetcher
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /downloads
+
+# Firecracker version and architecture
+ARG FC_VERSION=1.5.1
+ARG TARGETARCH
+
+# Map Docker architecture to Firecracker architecture and download
+# NOTE: Firecracker releases are .tgz archives containing binaries
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+    FC_ARCH="aarch64"; \
+    KERNEL_ARCH="aarch64"; \
+    else \
+    FC_ARCH="x86_64"; \
+    KERNEL_ARCH="x86_64"; \
+    fi && \
+    # Download and extract Firecracker release tarball
+    echo "Downloading Firecracker v${FC_VERSION} for ${FC_ARCH}..." && \
+    curl -sSL -o firecracker.tgz \
+    "https://github.com/firecracker-microvm/firecracker/releases/download/v${FC_VERSION}/firecracker-v${FC_VERSION}-${FC_ARCH}.tgz" && \
+    tar -xzf firecracker.tgz && \
+    mv "release-v${FC_VERSION}-${FC_ARCH}/firecracker-v${FC_VERSION}-${FC_ARCH}" firecracker && \
+    mv "release-v${FC_VERSION}-${FC_ARCH}/jailer-v${FC_VERSION}-${FC_ARCH}" jailer && \
+    chmod +x firecracker jailer && \
+    rm -rf firecracker.tgz "release-v${FC_VERSION}-${FC_ARCH}" && \
+    # Download Kernel
+    echo "Downloading kernel for ${KERNEL_ARCH}..." && \
+    curl -sSL -o vmlinux \
+    "https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/${KERNEL_ARCH}/kernels/vmlinux.bin"
+
+# Verify downloads
+RUN ls -la /downloads && \
+    ./firecracker --version && \
+    echo "Firecracker binary size: $(du -h firecracker | cut -f1)"
+
+# -----------------------------------------------------------------------------
+# Stage 5: Runtime - Final minimal production image
+# -----------------------------------------------------------------------------
+FROM debian:bookworm-slim AS runtime
+
+# Labels for container metadata
+LABEL org.opencontainers.image.title="petty-mcp"
+LABEL org.opencontainers.image.description="MCP server for isolated code execution sandboxes"
+LABEL org.opencontainers.image.source="https://github.com/vrn21/petty"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Required for AWS S3 access (fetching rootfs)
+    awscli \
+    # SSL certificates
+    ca-certificates \
+    # Process utilities
+    procps \
+    # Network utilities (debugging)
+    iproute2 \
+    # Required for healthcheck
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/cache/apt/*
+
+# Create non-root user (but we need root for /dev/kvm access)
+# The container runs as root to access KVM, but the actual code runs safely
+
+# Create directories
+RUN mkdir -p /var/lib/petty \
+    && mkdir -p /tmp/petty \
+    && mkdir -p /var/log/petty
+
+# Copy binaries from builder stages
+COPY --from=builder /app/target/release/petty-mcp /usr/local/bin/petty-mcp
+COPY --from=fetcher /downloads/firecracker /usr/local/bin/firecracker
+COPY --from=fetcher /downloads/jailer /usr/local/bin/jailer
+COPY --from=fetcher /downloads/vmlinux /var/lib/petty/vmlinux
+
+# Ensure binaries are executable
+RUN chmod +x /usr/local/bin/petty-mcp \
+    /usr/local/bin/firecracker \
+    /usr/local/bin/jailer
+
+# Environment variables with defaults
+ENV PETTY_KERNEL=/var/lib/petty/vmlinux
+ENV PETTY_ROOTFS=/var/lib/petty/debian-devbox.ext4
+ENV PETTY_FIRECRACKER=/usr/local/bin/firecracker
+ENV PETTY_CHROOT=/tmp/petty
+ENV PETTY_POOL_ENABLED=true
+ENV PETTY_POOL_MIN_SIZE=3
+ENV PETTY_TRANSPORT=both
+ENV PETTY_HTTP_HOST=0.0.0.0
+ENV PETTY_HTTP_PORT=8080
+ENV RUST_LOG=info
+
+# Expose HTTP port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Copy entrypoint script (separate file for better compatibility)
+COPY scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

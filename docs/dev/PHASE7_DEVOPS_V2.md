@@ -1,6 +1,6 @@
 # Phase 7: AWS Deployment (Refined v2)
 
-> Deploying Petty on c5.metal Spot Instance with build-from-source approach.
+> Deploying Petty on c5.metal Spot Instance with Docker container.
 
 ---
 
@@ -8,9 +8,9 @@
 
 This document outlines a streamlined deployment strategy:
 
-- **Download from source**: Firecracker, jailer, and kernel directly from AWS/GitHub
-- **S3 for rootfs only**: Only the ext4 image needs to be in your S3
-- **Build petty-mcp on EC2**: Compile from source during bootstrap (no binary uploads)
+- **Docker multi-stage build**: petty-mcp compiled from source INSIDE Docker build
+- **Download from source (in Docker)**: Firecracker, jailer, and kernel downloaded during Docker build
+- **S3 for rootfs only**: Only the ext4 image needs to be in your S3 (fetched at runtime)
 - **Manual control**: Start/stop instance manually (no spot termination handling)
 - **Environment variables**: All paths configurable at runtime
 
@@ -35,26 +35,25 @@ This document outlines a streamlined deployment strategy:
 │  ┌──────────────────────────────────────────────────────┐    │
 │  │                  c5.metal (Spot)                      │    │
 │  │                                                       │    │
-│  │  /usr/local/bin/                                      │    │
-│  │  ├── firecracker  ← Downloaded from GitHub            │    │
-│  │  ├── jailer       ← Downloaded from GitHub            │    │
-│  │  └── petty-mcp    ← Built from source (cargo build)   │    │
-│  │                                                       │    │
-│  │  /var/lib/petty/                                      │    │
-│  │  ├── vmlinux              ← Downloaded from AWS S3    │    │
-│  │  └── debian-devbox.ext4   ← Downloaded from your S3   │    │
-│  │                                                       │    │
-│  │  /opt/petty/              ← Git clone of repo         │    │
-│  │                                                       │    │
 │  │  ┌─────────────────────────────────────────────────┐ │    │
-│  │  │                 Petty Stack                      │ │    │
-│  │  │  ┌───────────┐  ┌───────────┐  ┌─────────────┐ │ │    │
-│  │  │  │ petty-mcp │──│ petty-core│──│ Firecracker │ │ │    │
-│  │  │  │  (stdio)  │  └───────────┘  └─────────────┘ │ │    │
-│  │  │  └───────────┘                                  │ │    │
+│  │  │           Docker Container (petty-mcp)          │ │    │
+│  │  │                                                  │ │    │
+│  │  │  /usr/local/bin/                                 │ │    │
+│  │  │  ├── petty-mcp    (built from source)            │ │    │
+│  │  │  ├── firecracker  (from GitHub)                  │ │    │
+│  │  │  └── jailer       (from GitHub)                  │ │    │
+│  │  │                                                  │ │    │
+│  │  │  /var/lib/petty/                                 │ │    │
+│  │  │  ├── vmlinux         (from AWS S3, baked in)     │ │    │
+│  │  │  └── debian-devbox   (from YOUR S3, at runtime)  │ │    │
+│  │  │                                                  │ │    │
+│  │  │  Endpoints:                                      │ │    │
+│  │  │  - GET  /health  → Health check                  │ │    │
+│  │  │  - POST /mcp     → JSON-RPC requests             │ │    │
+│  │  │  - GET  /mcp     → SSE stream                    │ │    │
 │  │  └─────────────────────────────────────────────────┘ │    │
 │  │                                                       │    │
-│  │  Security Group: SSH (22)                             │    │
+│  │  Security Group: SSH (22) + HTTP (8080)               │    │
 │  └──────────────────────────────────────────────────────┘    │
 │                               │                               │
 │                               ▼                               │
@@ -68,71 +67,73 @@ This document outlines a streamlined deployment strategy:
 
 ---
 
-## Binary Sources
+## Docker Multi-Stage Build
 
-| Binary               | Source          | Download Method                 |
-| -------------------- | --------------- | ------------------------------- |
-| `firecracker`        | GitHub Releases | Direct curl (once at bootstrap) |
-| `jailer`             | GitHub Releases | Direct curl (once at bootstrap) |
-| `vmlinux.bin`        | AWS S3 (public) | Direct curl (once at bootstrap) |
-| `debian-devbox.ext4` | Your S3 bucket  | aws s3 cp (once at bootstrap)   |
-| `petty-mcp`          | Git repo        | cargo build --release           |
+**File**: `Dockerfile.server`
 
-> **Note**: Firecracker is downloaded **once** during EC2 bootstrap. All microVMs reuse this single binary. Each VM spawn just forks a new Firecracker process - no re-downloading.
+The Dockerfile uses 5 stages for optimal caching and minimal image size:
+
+| Stage      | Base Image  | Purpose                                   |
+| ---------- | ----------- | ----------------------------------------- |
+| 1. chef    | rust:1.83   | Install cargo-chef for dependency caching |
+| 2. planner | chef        | Generate dependency recipe                |
+| 3. builder | chef        | Compile dependencies + petty-mcp          |
+| 4. fetcher | debian:slim | Download Firecracker, jailer, kernel      |
+| 5. runtime | debian:slim | Minimal production image (~150MB)         |
+
+### Why Docker Instead of Building on EC2?
+
+1. **Reproducible builds** - Same image on dev/staging/prod
+2. **Faster deployment** - No 5-10 minute Rust compilation on boot
+3. **Portable** - Image can run anywhere (EC2, ECS, local)
+4. **Cached layers** - Dependency layer cached, only app code rebuilds
+5. **Industry standard** - Follows Rust Docker best practices
+
+> **Note**: All binaries (Firecracker, jailer, kernel) are baked INTO the Docker image during build. Only the rootfs is fetched from S3 at container startup.
 
 ---
 
-## MCP Server Deployment: Research Summary
+## MCP Server Transport Modes
 
-### How OSS MCP Servers Run
+**petty-mcp now supports dual transport** via `rmcp` SDK:
 
-Based on research, there are two primary deployment patterns:
+| Mode               | Env Value | stdio | HTTP | Use Case               |
+| ------------------ | --------- | ----- | ---- | ---------------------- |
+| **Both (default)** | `both`    | ✅    | ✅   | Maximum compatibility  |
+| Stdio only         | `stdio`   | ✅    | ❌   | Claude Desktop, Cursor |
+| HTTP only          | `http`    | ❌    | ✅   | Remote AI agents only  |
 
-| Pattern              | Transport           | Use Case                                   | Pros                       | Cons                       |
-| -------------------- | ------------------- | ------------------------------------------ | -------------------------- | -------------------------- |
-| **stdio subprocess** | stdin/stdout        | Local integration (Claude Desktop, Cursor) | Simple, no network, secure | Client must spawn process  |
-| **HTTP server**      | Streamable HTTP/SSE | Remote/networked access                    | Scalable, accessible       | Needs security (TLS, auth) |
+### HTTP/SSE Endpoints
 
-### Current petty-mcp Design
+| Endpoint  | Method | Description                    |
+| --------- | ------ | ------------------------------ |
+| `/health` | GET    | Health check (JSON)            |
+| `/mcp`    | POST   | JSON-RPC requests              |
+| `/mcp`    | GET    | SSE stream for server messages |
+| `/`       | GET    | Server info page (HTML)        |
 
-Your `petty-mcp` uses **stdio transport** (via `rmcp::transport::stdio`). This is the standard for:
-
-- Claude Desktop integration
-- Cursor IDE
-- Local AI agent tools
-
-### Recommendation: Keep Systemd for stdio
-
-For stdio-based MCP servers, **systemd is appropriate** because:
-
-1. **Process management**: Auto-restart on crash
-2. **Logging**: Journald integration
-3. **Environment**: Clean environment variable handling
-4. **Boot startup**: Service starts on instance boot
-
-However, for **remote access**, you have options:
-
-#### Option A: SSH + stdio (Recommended for Dev)
-
-Clients SSH into the instance and spawn petty-mcp as a subprocess:
+### Example Request
 
 ```bash
-# Client connects via SSH and runs MCP
-ssh -i key.pem ubuntu@<ip> /usr/local/bin/petty-mcp
+# List available tools
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# Health check
+curl http://localhost:8080/health
 ```
 
-This keeps the stdio pattern and adds SSH security.
+### Systemd with HTTP Transport
 
-#### Option B: Add HTTP Transport (Future)
+Systemd is still the right choice because:
 
-For true remote access, add Streamable HTTP transport to petty-mcp:
+1. **Process management**: Auto-restart on crash
+2. **Logging**: Journald captures stdout/stderr
+3. **Boot startup**: Service starts on instance boot
+4. **Environment**: Clean env var handling
 
-```rust
-// Future: Add HTTP endpoint alongside stdio
-use rmcp::transport::streamable_http;
-```
-
-This would allow direct HTTP connections without SSH.
+The HTTP server runs as part of the petty-mcp process - no separate web server needed.
 
 ---
 
@@ -140,16 +141,19 @@ This would allow direct HTTP connections without SSH.
 
 **Already implemented in `petty-mcp`** (see `crates/petty-mcp/src/config.rs`):
 
-| Variable               | Default                      | Description                  |
-| ---------------------- | ---------------------------- | ---------------------------- |
-| `PETTY_KERNEL`         | `/var/lib/petty/vmlinux`     | Path to kernel image         |
-| `PETTY_ROOTFS`         | `/var/lib/petty/debian.ext4` | Path to rootfs image         |
-| `PETTY_FIRECRACKER`    | `/usr/bin/firecracker`       | Path to Firecracker binary   |
-| `PETTY_CHROOT`         | `/tmp/petty`                 | Working directory for VMs    |
-| `PETTY_POOL_ENABLED`   | `true`                       | Enable warm sandbox pool     |
-| `PETTY_POOL_MIN_SIZE`  | `3`                          | Minimum warm sandboxes       |
-| `PETTY_POOL_MAX_BOOTS` | `2`                          | Max concurrent pool boots    |
-| `RUST_LOG`             | -                            | Logging level (e.g., `info`) |
+| Variable               | Default                      | Description                      |
+| ---------------------- | ---------------------------- | -------------------------------- |
+| `PETTY_KERNEL`         | `/var/lib/petty/vmlinux`     | Path to kernel image             |
+| `PETTY_ROOTFS`         | `/var/lib/petty/debian.ext4` | Path to rootfs image             |
+| `PETTY_FIRECRACKER`    | `/usr/bin/firecracker`       | Path to Firecracker binary       |
+| `PETTY_CHROOT`         | `/tmp/petty`                 | Working directory for VMs        |
+| `PETTY_POOL_ENABLED`   | `true`                       | Enable warm sandbox pool         |
+| `PETTY_POOL_MIN_SIZE`  | `3`                          | Minimum warm sandboxes           |
+| `PETTY_POOL_MAX_BOOTS` | `2`                          | Max concurrent pool boots        |
+| `PETTY_TRANSPORT`      | `both`                       | Transport mode (stdio/http/both) |
+| `PETTY_HTTP_HOST`      | `0.0.0.0`                    | HTTP bind address                |
+| `PETTY_HTTP_PORT`      | `8080`                       | HTTP port                        |
+| `RUST_LOG`             | -                            | Logging level (e.g., `info`)     |
 
 ---
 
@@ -158,7 +162,9 @@ This would allow direct HTTP connections without SSH.
 ### Task 1: Terraform - VPC & Security
 
 - VPC with public subnet
-- Security group: SSH (22) only
+- Security group:
+  - SSH (22) - management access
+  - HTTP (8080) - MCP server for remote AI agents
 - Internet gateway for outbound
 
 ### Task 2: Terraform - S3 Bucket (Separate/Optional)
@@ -188,21 +194,24 @@ See [Systemd Service](#systemd-service) section below.
 ## File Structure
 
 ```
+
 terraform/
-├── main.tf           # Provider config
-├── variables.tf      # Inputs (region, key, bucket)
-├── outputs.tf        # Instance IP
-├── vpc.tf            # Network
-├── ec2.tf            # Spot instance
-├── iam.tf            # Roles (S3 read access)
+├── main.tf # Provider config
+├── variables.tf # Inputs (region, key, bucket)
+├── outputs.tf # Instance IP
+├── vpc.tf # Network
+├── ec2.tf # Spot instance
+├── iam.tf # Roles (S3 read access)
 └── scripts/
-    ├── user-data.sh  # Bootstrap
-    └── petty-mcp.service # Systemd unit
+├── user-data.sh # Bootstrap
+└── petty-mcp.service # Systemd unit
 
 # Optional (separate apply)
+
 terraform/s3/
-├── main.tf           # S3 bucket
-└── outputs.tf        # Bucket name
+├── main.tf # S3 bucket
+└── outputs.tf # Bucket name
+
 ```
 
 ---
@@ -216,11 +225,8 @@ set -euo pipefail
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-FC_VERSION="1.5.1"
-ARCH=$(uname -m)
 S3_BUCKET="${S3_BUCKET:-petty-artifacts}"
-PETTY_REPO="https://github.com/YOUR_USERNAME/petty.git"
-PETTY_BRANCH="main"
+DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/vrn21/petty-mcp:latest}"
 
 # ============================================================================
 # SYSTEM SETUP
@@ -229,27 +235,8 @@ echo ">>> Updating system..."
 apt-get update
 apt-get install -y --no-install-recommends \
     awscli \
-    curl \
-    git \
-    build-essential \
-    pkg-config \
-    libssl-dev
-
-# ============================================================================
-# INSTALL RUST
-# ============================================================================
-echo ">>> Installing Rust..."
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
-
-# ============================================================================
-# CREATE DIRECTORIES
-# ============================================================================
-echo ">>> Creating directories..."
-mkdir -p /var/lib/petty
-mkdir -p /tmp/petty
-mkdir -p /var/log/petty
-mkdir -p /opt/petty
+    docker.io \
+    curl
 
 # ============================================================================
 # FIX KVM PERMISSIONS
@@ -263,86 +250,50 @@ else
 fi
 
 # ============================================================================
-# DOWNLOAD FIRECRACKER FROM GITHUB (ONCE)
+# ENABLE DOCKER
 # ============================================================================
-echo ">>> Downloading Firecracker v${FC_VERSION}..."
-curl -sSL -o /usr/local/bin/firecracker \
-    "https://github.com/firecracker-microvm/firecracker/releases/download/v${FC_VERSION}/firecracker-v${FC_VERSION}-${ARCH}"
-chmod +x /usr/local/bin/firecracker
-
-echo ">>> Downloading Jailer v${FC_VERSION}..."
-curl -sSL -o /usr/local/bin/jailer \
-    "https://github.com/firecracker-microvm/firecracker/releases/download/v${FC_VERSION}/jailer-v${FC_VERSION}-${ARCH}"
-chmod +x /usr/local/bin/jailer
+echo ">>> Starting Docker..."
+systemctl enable docker
+systemctl start docker
 
 # ============================================================================
-# DOWNLOAD KERNEL FROM AWS PUBLIC S3 (ONCE)
+# PULL DOCKER IMAGE
 # ============================================================================
-echo ">>> Downloading kernel..."
-if [ "$ARCH" = "x86_64" ]; then
-    KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin"
-else
-    KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/aarch64/kernels/vmlinux.bin"
-fi
-curl -sSL -o /var/lib/petty/vmlinux "$KERNEL_URL"
+echo ">>> Pulling Docker image: $DOCKER_IMAGE"
+docker pull "$DOCKER_IMAGE"
 
 # ============================================================================
-# DOWNLOAD ROOTFS FROM YOUR S3 (ONCE)
-# ============================================================================
-echo ">>> Downloading rootfs from S3..."
-aws s3 cp "s3://${S3_BUCKET}/debian-devbox.ext4" /var/lib/petty/debian-devbox.ext4
-
-# ============================================================================
-# CLONE AND BUILD PETTY-MCP FROM SOURCE
-# ============================================================================
-echo ">>> Cloning petty repository..."
-git clone --branch "$PETTY_BRANCH" "$PETTY_REPO" /opt/petty
-
-echo ">>> Building petty-mcp (this may take a few minutes)..."
-cd /opt/petty
-cargo build --release -p petty-mcp
-
-echo ">>> Installing petty-mcp..."
-cp target/release/petty-mcp /usr/local/bin/petty-mcp
-chmod +x /usr/local/bin/petty-mcp
-
-# ============================================================================
-# VERIFY DOWNLOADS
-# ============================================================================
-echo ">>> Verifying binaries..."
-/usr/local/bin/firecracker --version
-/usr/local/bin/petty-mcp --help 2>&1 || echo "(petty-mcp may not have --help)"
-
-# ============================================================================
-# INSTALL SYSTEMD SERVICE
+# CREATE SYSTEMD SERVICE FOR DOCKER CONTAINER
 # ============================================================================
 echo ">>> Installing systemd service..."
-cat > /etc/systemd/system/petty-mcp.service << 'EOF'
+cat > /etc/systemd/system/petty-mcp.service << EOF
 [Unit]
-Description=Petty MCP Server
-After=network.target
+Description=Petty MCP Server (Docker)
+After=network.target docker.service
+Requires=docker.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/petty-mcp
 Restart=on-failure
 RestartSec=5
 
-# Environment configuration (matches petty-mcp config.rs)
-Environment=PETTY_KERNEL=/var/lib/petty/vmlinux
-Environment=PETTY_ROOTFS=/var/lib/petty/debian-devbox.ext4
-Environment=PETTY_FIRECRACKER=/usr/local/bin/firecracker
-Environment=PETTY_CHROOT=/tmp/petty
-Environment=PETTY_POOL_ENABLED=true
-Environment=PETTY_POOL_MIN_SIZE=3
-Environment=RUST_LOG=info
+# Pull latest image before starting (optional, remove for faster restarts)
+ExecStartPre=/usr/bin/docker pull $DOCKER_IMAGE
 
-# Logging (minimal)
-StandardOutput=append:/var/log/petty/mcp.log
-StandardError=append:/var/log/petty/mcp.log
+# Run the container
+ExecStart=/usr/bin/docker run --rm --name petty-mcp \\
+    --privileged \\
+    --device=/dev/kvm \\
+    -p 8080:8080 \\
+    -e PETTY_ROOTFS_S3_URL=s3://${S3_BUCKET}/debian-devbox.ext4 \\
+    -e PETTY_TRANSPORT=both \\
+    -e PETTY_HTTP_HOST=0.0.0.0 \\
+    -e PETTY_HTTP_PORT=8080 \\
+    -e RUST_LOG=info \\
+    $DOCKER_IMAGE
 
-# Security (need root for /dev/kvm access)
-NoNewPrivileges=false
+# Stop the container gracefully
+ExecStop=/usr/bin/docker stop petty-mcp
 
 [Install]
 WantedBy=multi-user.target
@@ -359,58 +310,27 @@ systemctl start petty-mcp.service
 echo ">>> Bootstrap complete!"
 echo "Service status: $(systemctl is-active petty-mcp.service)"
 echo ""
-echo "Build time: Rust compilation took a while, but this is a ONE-TIME cost."
-echo "Future instance restarts will be instant (binary already compiled)."
+echo "Container running - no Rust compilation needed!"
+echo "First start fetches rootfs from S3, subsequent starts are instant."
 ```
 
 ---
 
-## Systemd Service
+## Systemd Service (Docker)
 
-File: `/etc/systemd/system/petty-mcp.service`
+The bootstrap script creates a systemd service that runs the Docker container. Key features:
 
-```ini
-[Unit]
-Description=Petty MCP Server
-After=network.target
+- Pulls latest image on restart (optional)
+- Runs container with `--privileged` for KVM access
+- Exposes port 8080
+- Fetches rootfs from S3 on first run
 
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/petty-mcp
-Restart=on-failure
-RestartSec=5
+### Why Systemd + Docker?
 
-# Environment configuration (matches petty-mcp config.rs)
-Environment=PETTY_KERNEL=/var/lib/petty/vmlinux
-Environment=PETTY_ROOTFS=/var/lib/petty/debian-devbox.ext4
-Environment=PETTY_FIRECRACKER=/usr/local/bin/firecracker
-Environment=PETTY_CHROOT=/tmp/petty
-Environment=PETTY_POOL_ENABLED=true
-Environment=PETTY_POOL_MIN_SIZE=3
-Environment=RUST_LOG=info
-
-# Logging (minimal)
-StandardOutput=append:/var/log/petty/mcp.log
-StandardError=append:/var/log/petty/mcp.log
-
-# Security (need root for /dev/kvm access)
-NoNewPrivileges=false
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### Why Systemd?
-
-Research confirms systemd is the standard approach for MCP servers in production:
-
-1. **Process supervision**: Auto-restart on crash
-2. **Environment isolation**: Clean env var handling
-3. **Logging integration**: Journald captures stdout/stderr
-4. **Boot startup**: Service auto-starts on instance boot
-5. **Resource limits**: Can add memory/CPU limits if needed
-
-For stdio-based MCP servers specifically, systemd keeps the process running and clients (via SSH) can connect to it.
+1. **Process supervision**: Auto-restart container on crash
+2. **Clean separation**: App in container, management on host
+3. **Easy updates**: Just `docker pull` and restart
+4. **Boot startup**: Service starts on instance boot
 
 ---
 
@@ -463,10 +383,36 @@ aws s3 cp images/output/debian-devbox.ext4 s3://your-bucket/
 
 ---
 
+## Docker Build Commands
+
+```bash
+# Build the image locally
+docker build -f Dockerfile.server -t petty-mcp:latest .
+
+# Build for x86_64 (from ARM Mac)
+docker build --platform linux/amd64 -f Dockerfile.server -t petty-mcp:latest .
+
+# Tag for registry
+docker tag petty-mcp:latest ghcr.io/vrn21/petty-mcp:latest
+
+# Push to registry
+docker push ghcr.io/vrn21/petty-mcp:latest
+
+# Run locally for testing (requires /dev/kvm on Linux)
+docker run --privileged --device=/dev/kvm -p 8080:8080 \
+  -e PETTY_ROOTFS=/path/to/rootfs.ext4 \
+  petty-mcp:latest
+```
+
+---
+
 ## Quick Commands
 
 ```bash
-# Deploy
+# Build Docker image
+docker build -f Dockerfile.server -t petty-mcp:latest .
+
+# Deploy infrastructure
 terraform apply -var="ssh_key_name=your-key" -var="s3_bucket=your-bucket"
 
 # SSH
