@@ -42,7 +42,7 @@ tower = "0.5"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # MCP
-rmcp = { version = "0.12", features = ["server", "transport-io"] }
+rmcp = { version = "0.12", features = ["server", "transport-io", "transport-streamable-http-server", "macros"] }
 schemars = "0.8"
 
 # Utilities

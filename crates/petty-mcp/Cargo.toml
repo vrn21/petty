@@ -5,30 +5,37 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "MCP server exposing Petty sandboxes to AI agents"
+description = "MCP server for Petty sandboxes"
 
 [[bin]]
 name = "petty-mcp"
 path = "src/main.rs"
 
 [dependencies]
-# Internal
+# Core
 petty-core = { path = "../petty-core" }
 
-# MCP SDK (official Rust SDK)
-rmcp = { version = "0.12", features = ["server", "transport-io", "macros"] }
+# MCP SDK with HTTP transport
+rmcp = { workspace = true, features = ["server", "transport-io", "transport-streamable-http-server", "macros"] }
 
 # Async runtime
 tokio = { workspace = true }
 
-# Serialization + schema generation
+# Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
-schemars = "0.8"
+
+# Schema generation for MCP
+schemars = { workspace = true }
 
 # Logging
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+# HTTP server
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
 
 # Utilities
 uuid = { workspace = true }

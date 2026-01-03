@@ -2,6 +2,7 @@
 //!
 //! Configuration is loaded from environment variables with sensible defaults.
 
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
 /// Maximum size for code/content input in bytes (10 MB).
@@ -9,6 +10,39 @@ pub const MAX_INPUT_SIZE_BYTES: usize = 10 * 1024 * 1024;
 
 /// Maximum command length in characters.
 pub const MAX_COMMAND_LENGTH: usize = 1024 * 1024; // 1 MB
+
+/// Transport mode for the MCP server.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TransportMode {
+    /// Stdio only (for local AI tools like Claude Desktop)
+    Stdio,
+    /// HTTP/SSE only (for remote AI agents)
+    Http,
+    /// Both stdio and HTTP (default - maximum compatibility)
+    #[default]
+    Both,
+}
+
+impl TransportMode {
+    /// Parse from string (case-insensitive).
+    pub fn parse(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "stdio" => Self::Stdio,
+            "http" | "sse" | "remote" => Self::Http,
+            _ => Self::Both,
+        }
+    }
+
+    /// Check if stdio transport should be enabled.
+    pub fn stdio_enabled(&self) -> bool {
+        matches!(self, Self::Stdio | Self::Both)
+    }
+
+    /// Check if HTTP transport should be enabled.
+    pub fn http_enabled(&self) -> bool {
+        matches!(self, Self::Http | Self::Both)
+    }
+}
 
 /// Configuration for the Petty MCP server.
 #[derive(Debug, Clone)]
@@ -33,6 +67,12 @@ pub struct PettyConfig {
 
     /// Maximum concurrent boots during pool fill (default: 2).
     pub pool_max_boots: usize,
+
+    /// Transport mode (default: both stdio and HTTP).
+    pub transport_mode: TransportMode,
+
+    /// HTTP server bind address.
+    pub http_addr: SocketAddr,
 }
 
 /// Configuration validation error.
@@ -61,6 +101,8 @@ impl Default for PettyConfig {
             pool_enabled: true,
             pool_min_size: 3,
             pool_max_boots: 2,
+            transport_mode: TransportMode::Both,
+            http_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 8080),
         }
     }
 }
@@ -77,8 +119,21 @@ impl PettyConfig {
     /// | `PETTY_POOL_ENABLED` | `true` |
     /// | `PETTY_POOL_MIN_SIZE` | `3` |
     /// | `PETTY_POOL_MAX_BOOTS` | `2` |
+    /// | `PETTY_TRANSPORT` | `both` (stdio, http, both) |
+    /// | `PETTY_HTTP_HOST` | `0.0.0.0` |
+    /// | `PETTY_HTTP_PORT` | `8080` |
     pub fn from_env() -> Self {
         let default = Self::default();
+
+        let http_host: IpAddr = std::env::var("PETTY_HTTP_HOST")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
+
+        let http_port: u16 = std::env::var("PETTY_HTTP_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8080);
 
         Self {
             kernel_path: std::env::var("PETTY_KERNEL")
@@ -104,6 +159,10 @@ impl PettyConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(default.pool_max_boots),
+            transport_mode: std::env::var("PETTY_TRANSPORT")
+                .map(|v| TransportMode::parse(&v))
+                .unwrap_or(default.transport_mode),
+            http_addr: SocketAddr::new(http_host, http_port),
         }
     }
 
@@ -170,6 +229,30 @@ mod tests {
             PathBuf::from("/usr/bin/firecracker")
         );
         assert_eq!(config.chroot_path, PathBuf::from("/tmp/petty"));
+        assert_eq!(config.transport_mode, TransportMode::Both);
+        assert_eq!(config.http_addr.port(), 8080);
+    }
+
+    #[test]
+    fn test_transport_mode_parsing() {
+        assert_eq!(TransportMode::parse("stdio"), TransportMode::Stdio);
+        assert_eq!(TransportMode::parse("STDIO"), TransportMode::Stdio);
+        assert_eq!(TransportMode::parse("http"), TransportMode::Http);
+        assert_eq!(TransportMode::parse("HTTP"), TransportMode::Http);
+        assert_eq!(TransportMode::parse("both"), TransportMode::Both);
+        assert_eq!(TransportMode::parse("anything"), TransportMode::Both);
+    }
+
+    #[test]
+    fn test_transport_mode_flags() {
+        assert!(TransportMode::Stdio.stdio_enabled());
+        assert!(!TransportMode::Stdio.http_enabled());
+
+        assert!(!TransportMode::Http.stdio_enabled());
+        assert!(TransportMode::Http.http_enabled());
+
+        assert!(TransportMode::Both.stdio_enabled());
+        assert!(TransportMode::Both.http_enabled());
     }
 
     #[test]
@@ -179,6 +262,9 @@ mod tests {
         std::env::remove_var("PETTY_ROOTFS");
         std::env::remove_var("PETTY_FIRECRACKER");
         std::env::remove_var("PETTY_CHROOT");
+        std::env::remove_var("PETTY_TRANSPORT");
+        std::env::remove_var("PETTY_HTTP_HOST");
+        std::env::remove_var("PETTY_HTTP_PORT");
 
         let config = PettyConfig::from_env();
         let default = PettyConfig::default();
@@ -187,6 +273,7 @@ mod tests {
         assert_eq!(config.rootfs_path, default.rootfs_path);
         assert_eq!(config.firecracker_path, default.firecracker_path);
         assert_eq!(config.chroot_path, default.chroot_path);
+        assert_eq!(config.transport_mode, TransportMode::Both);
     }
 
     #[test]

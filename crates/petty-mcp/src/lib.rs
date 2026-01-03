@@ -3,24 +3,42 @@
 //! MCP (Model Context Protocol) server exposing Petty sandboxes to AI agents.
 //!
 //! This crate provides an MCP server that allows AI agents (like Claude Desktop,
-//! Cursor, etc.) to create and interact with isolated code execution sandboxes.
+//! Cursor, remote agents, etc.) to create and interact with isolated code
+//! execution sandboxes.
 //!
 //! ## Quick Start
 //!
-//! Run the server with default configuration:
+//! Run the server (enables both stdio and HTTP by default):
 //!
 //! ```bash
 //! cargo run -p petty-mcp
 //! ```
 //!
+//! The server will listen on:
+//! - **stdio** for local AI tools (Claude Desktop, Cursor)
+//! - **HTTP :8080** for remote AI agents
+//!
+//! ## Configuration
+//!
 //! Configure via environment variables:
 //!
 //! ```bash
+//! # VM resources
 //! export PETTY_KERNEL=/path/to/vmlinux
 //! export PETTY_ROOTFS=/path/to/rootfs.ext4
 //! export PETTY_FIRECRACKER=/usr/bin/firecracker
 //! export PETTY_CHROOT=/tmp/petty
-//! cargo run -p petty-mcp
+//!
+//! # Transport mode (default: both)
+//! export PETTY_TRANSPORT=both  # stdio, http, or both
+//!
+//! # HTTP server
+//! export PETTY_HTTP_HOST=0.0.0.0
+//! export PETTY_HTTP_PORT=8080
+//!
+//! # Warm pool
+//! export PETTY_POOL_ENABLED=true
+//! export PETTY_POOL_MIN_SIZE=3
 //! ```
 //!
 //! ## MCP Tools
@@ -39,9 +57,11 @@
 //! | `list_directory` | List directory contents |
 
 mod config;
+pub mod http;
 mod server;
 mod types;
 
-pub use config::{ConfigError, PettyConfig, MAX_COMMAND_LENGTH, MAX_INPUT_SIZE_BYTES};
+pub use config::{ConfigError, PettyConfig, TransportMode, MAX_COMMAND_LENGTH, MAX_INPUT_SIZE_BYTES};
+pub use http::build_router;
 pub use server::PettyServer;
 pub use types::*;

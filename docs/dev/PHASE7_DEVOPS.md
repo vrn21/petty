@@ -1,98 +1,135 @@
-# Phase 7: DevOps & AWS Deployment
+# Phase 7: AWS Deployment (Simplified)
 
-> Scaling Petty to bare-metal EC2 instances for production workload.
-
----
-
-## Purpose
-
-Petty requires KVM (Hardware Virtualization), which isn't available on standard nested VMs.
-Phase 7 focuses on:
-
-1.  **Terraform**: Automated provisioning of AWS Bare Metal (`.metal`) instances.
-2.  **Petty Daemon**: Wrapping the Petty stack into a single, deployable unit.
-3.  **Networking**: Automated setup of TAP devices and host NAT.
+> Deploying Petty on c5.metal Spot Instance with manual control.
 
 ---
 
-## Infrastructure (Terraform)
+## Cost Summary
 
-### Target: EC2 Bare Metal
+| Mode      | Hourly     | If Used 40hrs/month |
+| --------- | ---------- | ------------------- |
+| On-Demand | $4.08      | $163                |
+| **Spot**  | **~$1.26** | **~$50**            |
 
-- **Instance Types**: `c5.metal`, `m5.metal`, or `i3.metal`.
-- **OS**: Ubuntu 22.04 or Debian 12.
-- **Resource Provisioning**:
-  - Host hardening.
-  - KVM kernel module configuration.
-  - Firecracker binary installation.
+**Manual control = you only pay when running.**
 
 ---
 
-## The Petty Daemon
+## Architecture
 
-To make deployment simple, the `petty-mcp` and `petty-core` stack should be treated as a single service.
-
-### Components:
-
-1.  **Installation Script**: Installs Firecracker, prepares chroot jail, sets up bridge networking.
-2.  **Petty Service**: Systemd unit to keep the MCP server (or future API server) running.
-3.  **Image Distribution**: Mechanism to pull `.ext4` rootfs and `vmlinux` images from S3 or Registry.
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                        AWS Account                            │
+├──────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │                  c5.metal (Spot)                      │    │
+│  │  ┌─────────────────────────────────────────────────┐ │    │
+│  │  │                 Petty Stack                      │ │    │
+│  │  │  ┌───────────┐  ┌───────────┐  ┌─────────────┐  │ │    │
+│  │  │  │ petty-mcp │──│ petty-core│──│  Firecracker │  │ │    │
+│  │  │  └───────────┘  └───────────┘  └─────────────┘  │ │    │
+│  │  └─────────────────────────────────────────────────┘ │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                               │                               │
+│                               ▼                               │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │                      S3 Bucket                         │    │
+│  │    vmlinux.bin  |  debian-python.ext4  |  debian.ext4  │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                                                               │
+└──────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Implementation Tasks
 
-### Task 1: Terraform Modules
+### Task 1: Terraform - VPC & Security
 
-- Define `main.tf` for an EC2 bare-metal instance.
-- Configure security groups (SSH, future API ports).
-- Use `user_data` to bootstrap the host.
+- VPC with public subnet
+- Security group: SSH (22)
+- Internet gateway for outbound
 
-### Task 2: Host Bootstrap Script
+### Task 2: Terraform - S3 Bucket
 
-- Update `apt` and install `docker`, `git`, `build-essential`.
-- Enable KVM: `modprobe kvm`.
-- Set `/dev/kvm` permissions for the petty user.
-- Install Firecracker binary.
+- Create bucket for images
+- IAM policy for EC2 read access
 
-### Task 3: Network Automation
+### Task 3: Terraform - Spot Instance
 
-- Create a script to setup `petty0` bridge.
-- Add `iptables` rules for NAT (giving VMs internet access).
-- Automate TAP device creation/deletion in `petty-vm`.
+- c5.metal spot request
+- IAM instance profile (S3 access)
+- User-data script for bootstrap
 
-### Task 4: Rootfs Lifecycle on Host
+### Task 4: Bootstrap Script (user-data.sh)
 
-- Script to download toolchain images from S3/Registry.
-- Verify checksums and store in `/var/lib/petty/images`.
+1. Update packages
+2. Download Firecracker binary
+3. Download images from S3 to `/var/lib/petty/`
+4. Enable and start petty service
 
-### Task 5: Petty Systemd Service
+### Task 5: Systemd Service
 
-- Wrap `petty-mcp` or a new `petty-daemon` into a background service.
-- Ensure it starts after the network bridge and images are ready.
+- `/etc/systemd/system/petty.service`
+- Auto-restart on failure
 
 ---
 
-## Build Pipeline (CI/CD)
+## File Structure
 
-### GitHub Actions:
+```
+terraform/
+├── main.tf           # Provider config
+├── variables.tf      # Inputs (region, key, bucket)
+├── outputs.tf        # Instance IP
+├── vpc.tf            # Network
+├── ec2.tf            # Spot instance
+├── s3.tf             # Image bucket
+├── iam.tf            # Roles
+└── scripts/
+    ├── user-data.sh  # Bootstrap
+    └── petty.service # Systemd unit
+```
 
-1.  **Binary Build**: Cross-compile `petty-agent` and `petty-mcp` for Linux.
-2.  **Image Build**: Run Phase 5 `Makefile` to generate `.ext4` images.
-3.  **Release**: Upload binaries and images to GitHub Releases or S3.
+---
+
+## Quick Commands
+
+```bash
+# Deploy
+terraform apply -var="ssh_key_name=your-key"
+
+# SSH
+ssh -i ~/.ssh/key.pem ubuntu@$(terraform output -raw public_ip)
+
+# Manual stop (saves money)
+aws ec2 stop-instances --instance-ids $(terraform output -raw instance_id)
+
+# Manual start
+aws ec2 start-instances --instance-ids $(terraform output -raw instance_id)
+
+# Destroy (when done)
+terraform destroy
+```
+
+---
+
+## Variables
+
+| Name           | Required | Default               | Description  |
+| -------------- | -------- | --------------------- | ------------ |
+| `ssh_key_name` | Yes      | -                     | EC2 key pair |
+| `region`       | No       | us-east-1             | AWS region   |
+| `spot_price`   | No       | 1.50                  | Max bid      |
+| `s3_bucket`    | No       | petty-images-{random} | Image bucket |
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] Terraform can provision a functional bare-metal instance.
-- [ ] Host is automatically configured with KVM and Networking.
-- [ ] Petty service starts up and is ready for MCP connections.
-- [ ] VMs inside Petty can access the internet (NAT works).
-- [ ] CI/CD automatically produces all required artifacts.
-
----
-
-## Final Goal
-
-A single `terraform apply` command should result in a fully functional Petty sandbox host ready to serve AI agents.
+- [ ] Terraform provisions c5.metal spot
+- [ ] Images download from S3 on boot
+- [ ] Petty service auto-starts
+- [ ] SSH access works
+- [ ] Manual stop/start works

@@ -1,12 +1,20 @@
 //! Petty MCP Server entry point.
 //!
-//! This binary starts the MCP server using stdio transport,
-//! suitable for integration with Claude Desktop, Cursor, and similar tools.
+//! This binary starts the MCP server using both stdio and HTTP/SSE transports
+//! by default, suitable for both local AI tools (Claude Desktop, Cursor) and
+//! remote AI agents.
+//!
+//! ## Transport Modes
+//!
+//! - **both** (default): Runs stdio + HTTP simultaneously
+//! - **stdio**: Only stdio transport
+//! - **http**: Only HTTP/SSE transport
 
-use petty_mcp::{PettyConfig, PettyServer};
+use petty_mcp::{http, PettyConfig, PettyServer};
 use rmcp::transport::stdio;
 use rmcp::ServiceExt;
 use tokio::signal;
+use tokio::sync::broadcast;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[tokio::main]
@@ -27,46 +35,106 @@ async fn main() -> anyhow::Result<()> {
     config.validate_warn();
 
     // Create the server
-    let server = PettyServer::new(config);
+    let server = PettyServer::new(config.clone());
 
     // Start the warm pool filler (if enabled)
     server.start_pool().await;
 
-    // Get manager Arc and server clone before starting the service (for shutdown cleanup)
+    // Create shutdown broadcast channel
+    let (shutdown_tx, _) = broadcast::channel::<()>(1);
+
+    // Get handles for cleanup
     let cleanup_manager = server.manager_arc();
     let cleanup_server = server.clone();
 
-    // Start serving via stdio transport
-    tracing::info!("Listening on stdio");
-    let service = server.serve(stdio()).await?;
+    // Spawn transports based on configuration
+    let mut handles = Vec::new();
 
-    // Set up graceful shutdown handler
-    let shutdown_task = tokio::spawn(async move {
-        // Wait for shutdown signal
-        let _ = signal::ctrl_c().await;
-        tracing::info!("Received shutdown signal, cleaning up...");
+    // HTTP transport
+    if config.transport_mode.http_enabled() {
+        let http_server = server.clone();
+        let http_addr = config.http_addr;
+        let mut shutdown_rx = shutdown_tx.subscribe();
 
-        // Shutdown the warm pool first
-        cleanup_server.shutdown_pool().await;
+        let http_handle = tokio::spawn(async move {
+            let shutdown = async move {
+                let _ = shutdown_rx.recv().await;
+            };
 
-        // Destroy all managed sandboxes
-        if let Err(e) = cleanup_manager.destroy_all().await {
-            tracing::error!("Error during sandbox cleanup: {e}");
-        } else {
-            tracing::info!("All sandboxes cleaned up");
-        }
-    });
-
-    // Wait for the service to complete
-    tokio::select! {
-        result = service.waiting() => {
-            if let Err(e) = result {
-                tracing::error!("Service error: {e}");
+            if let Err(e) = http::serve(http_server, http_addr, shutdown).await {
+                tracing::error!(error = %e, "HTTP server error");
             }
+        });
+
+        handles.push(http_handle);
+        tracing::info!(addr = %config.http_addr, "HTTP/SSE transport enabled");
+    }
+
+    // Stdio transport
+    if config.transport_mode.stdio_enabled() {
+        let stdio_server = server.clone();
+        let mut shutdown_rx = shutdown_tx.subscribe();
+
+        let stdio_handle = tokio::spawn(async move {
+            match stdio_server.serve(stdio()).await {
+                Ok(service) => {
+                    tokio::select! {
+                        result = service.waiting() => {
+                            if let Err(e) = result {
+                                tracing::error!(error = %e, "Stdio service error");
+                            }
+                        }
+                        _ = async { shutdown_rx.recv().await } => {
+                            tracing::info!("Stdio transport shutting down");
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to start stdio transport");
+                }
+            }
+        });
+
+        handles.push(stdio_handle);
+        tracing::info!("Stdio transport enabled");
+    }
+
+    // Log startup summary
+    match config.transport_mode {
+        petty_mcp::TransportMode::Both => {
+            tracing::info!(
+                http_addr = %config.http_addr,
+                "Server ready (stdio + HTTP/SSE)"
+            );
         }
-        _ = shutdown_task => {
-            tracing::info!("Shutdown complete");
+        petty_mcp::TransportMode::Http => {
+            tracing::info!(http_addr = %config.http_addr, "Server ready (HTTP/SSE only)");
         }
+        petty_mcp::TransportMode::Stdio => {
+            tracing::info!("Server ready (stdio only)");
+        }
+    }
+
+    // Wait for shutdown signal
+    signal::ctrl_c().await?;
+    tracing::info!("Received shutdown signal, cleaning up...");
+
+    // Broadcast shutdown to all transports
+    let _ = shutdown_tx.send(());
+
+    // Shutdown the warm pool
+    cleanup_server.shutdown_pool().await;
+
+    // Destroy all managed sandboxes
+    if let Err(e) = cleanup_manager.destroy_all().await {
+        tracing::error!(error = %e, "Error during sandbox cleanup");
+    } else {
+        tracing::info!("All sandboxes cleaned up");
+    }
+
+    // Wait for transport handles to complete
+    for handle in handles {
+        let _ = handle.await;
     }
 
     tracing::info!("Server shutdown complete");
