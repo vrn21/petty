@@ -118,6 +118,46 @@ impl SandboxManager {
         self.create(config).await
     }
 
+    /// Register an externally-created sandbox.
+    ///
+    /// This is used to register sandboxes acquired from a warm pool.
+    /// The sandbox will be tracked by the manager for lifecycle management.
+    ///
+    /// # Arguments
+    ///
+    /// * `sandbox` - A ready-to-use sandbox instance
+    ///
+    /// # Returns
+    ///
+    /// On success: The ID of the registered sandbox.
+    /// On failure: A tuple of (error, sandbox) so caller can clean up.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error (with the sandbox) if max_sandboxes limit is reached.
+    pub async fn register(&self, sandbox: Sandbox) -> Result<SandboxId, (CoreError, Sandbox)> {
+        // Check sandbox limit
+        if self.config.max_sandboxes > 0 {
+            let current = self.sandboxes.read().await.len();
+            if current >= self.config.max_sandboxes {
+                return Err((
+                    CoreError::Connection(format!(
+                        "max sandbox limit reached ({})",
+                        self.config.max_sandboxes
+                    )),
+                    sandbox,
+                ));
+            }
+        }
+
+        let id = sandbox.id();
+        let mut sandboxes = self.sandboxes.write().await;
+        sandboxes.insert(id, sandbox);
+
+        tracing::info!(sandbox_id = %id, "Sandbox registered from pool");
+        Ok(id)
+    }
+
     /// Execute a synchronous operation on a sandbox.
     ///
     /// # Arguments

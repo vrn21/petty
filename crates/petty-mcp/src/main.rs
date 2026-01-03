@@ -29,8 +29,12 @@ async fn main() -> anyhow::Result<()> {
     // Create the server
     let server = PettyServer::new(config);
 
-    // Get manager Arc before starting the server (for shutdown cleanup)
+    // Start the warm pool filler (if enabled)
+    server.start_pool().await;
+
+    // Get manager Arc and server clone before starting the service (for shutdown cleanup)
     let cleanup_manager = server.manager_arc();
+    let cleanup_server = server.clone();
 
     // Start serving via stdio transport
     tracing::info!("Listening on stdio");
@@ -40,9 +44,12 @@ async fn main() -> anyhow::Result<()> {
     let shutdown_task = tokio::spawn(async move {
         // Wait for shutdown signal
         let _ = signal::ctrl_c().await;
-        tracing::info!("Received shutdown signal, cleaning up sandboxes...");
+        tracing::info!("Received shutdown signal, cleaning up...");
 
-        // Destroy all sandboxes
+        // Shutdown the warm pool first
+        cleanup_server.shutdown_pool().await;
+
+        // Destroy all managed sandboxes
         if let Err(e) = cleanup_manager.destroy_all().await {
             tracing::error!("Error during sandbox cleanup: {e}");
         } else {

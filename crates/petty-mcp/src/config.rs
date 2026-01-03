@@ -24,6 +24,15 @@ pub struct PettyConfig {
 
     /// Working directory for VMs.
     pub chroot_path: PathBuf,
+
+    /// Enable warm pooling for faster sandbox creation (default: true).
+    pub pool_enabled: bool,
+
+    /// Minimum warm sandboxes in pool (default: 3).
+    pub pool_min_size: usize,
+
+    /// Maximum concurrent boots during pool fill (default: 2).
+    pub pool_max_boots: usize,
 }
 
 /// Configuration validation error.
@@ -49,6 +58,9 @@ impl Default for PettyConfig {
             rootfs_path: PathBuf::from("/var/lib/petty/debian.ext4"),
             firecracker_path: PathBuf::from("/usr/bin/firecracker"),
             chroot_path: PathBuf::from("/tmp/petty"),
+            pool_enabled: true,
+            pool_min_size: 3,
+            pool_max_boots: 2,
         }
     }
 }
@@ -62,6 +74,9 @@ impl PettyConfig {
     /// | `PETTY_ROOTFS` | `/var/lib/petty/debian.ext4` |
     /// | `PETTY_FIRECRACKER` | `/usr/bin/firecracker` |
     /// | `PETTY_CHROOT` | `/tmp/petty` |
+    /// | `PETTY_POOL_ENABLED` | `true` |
+    /// | `PETTY_POOL_MIN_SIZE` | `3` |
+    /// | `PETTY_POOL_MAX_BOOTS` | `2` |
     pub fn from_env() -> Self {
         let default = Self::default();
 
@@ -78,6 +93,17 @@ impl PettyConfig {
             chroot_path: std::env::var("PETTY_CHROOT")
                 .map(PathBuf::from)
                 .unwrap_or(default.chroot_path),
+            pool_enabled: std::env::var("PETTY_POOL_ENABLED")
+                .map(|v| v != "false" && v != "0")
+                .unwrap_or(default.pool_enabled),
+            pool_min_size: std::env::var("PETTY_POOL_MIN_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default.pool_min_size),
+            pool_max_boots: std::env::var("PETTY_POOL_MAX_BOOTS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default.pool_max_boots),
         }
     }
 

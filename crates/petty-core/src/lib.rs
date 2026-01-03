@@ -97,15 +97,18 @@
 //! - **File Operations**: Read, write, and list files in the sandbox
 //! - **Concurrent Access**: Thread-safe access to multiple sandboxes
 //! - **Automatic Retry**: Connection retries for VM boot time tolerance
+//! - **Warm Pooling**: Pre-booted sandbox pool for sub-200ms allocation
 
 mod client;
 mod config;
 mod error;
 mod manager;
+mod pool;
 mod sandbox;
 
 pub use client::{AgentClient, ExecResult, FileEntry};
 pub use config::{SandboxConfig, SandboxConfigBuilder};
 pub use error::{CoreError, Result};
 pub use manager::{ManagerConfig, SandboxManager};
+pub use pool::{PoolConfig, PoolStats, SandboxPool};
 pub use sandbox::{Sandbox, SandboxId, SandboxState};

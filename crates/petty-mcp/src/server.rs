@@ -6,7 +6,7 @@
 use crate::config::{PettyConfig, MAX_COMMAND_LENGTH, MAX_INPUT_SIZE_BYTES};
 use crate::types::*;
 
-use petty_core::{ManagerConfig, SandboxConfig, SandboxManager};
+use petty_core::{ManagerConfig, PoolConfig, SandboxConfig, SandboxManager, SandboxPool};
 use rmcp::{
     handler::server::ServerHandler,
     model::*,
@@ -15,6 +15,7 @@ use rmcp::{
 };
 use schemars::schema_for;
 use std::sync::Arc;
+use tokio::sync::Mutex as TokioMutex;
 
 /// MCP server for Petty sandbox operations.
 ///
@@ -27,6 +28,9 @@ pub struct PettyServer {
 
     /// Configuration
     config: PettyConfig,
+
+    /// Warm sandbox pool (optional, based on config)
+    pool: Option<Arc<TokioMutex<SandboxPool>>>,
 }
 
 impl PettyServer {
@@ -41,7 +45,56 @@ impl PettyServer {
 
         let manager = Arc::new(SandboxManager::new(manager_config));
 
-        Self { manager, config }
+        // Create pool if enabled
+        let pool = if config.pool_enabled {
+            let pool_config = PoolConfig {
+                min_size: config.pool_min_size,
+                max_concurrent_boots: config.pool_max_boots,
+                sandbox_config: SandboxConfig::builder()
+                    .kernel(&config.kernel_path)
+                    .rootfs(&config.rootfs_path)
+                    .build()
+                    .expect("valid sandbox config from validated paths"),
+                ..Default::default()
+            };
+            tracing::info!(
+                pool_enabled = true,
+                min_size = config.pool_min_size,
+                max_boots = config.pool_max_boots,
+                "Warm pool configured"
+            );
+            Some(Arc::new(TokioMutex::new(SandboxPool::new(pool_config))))
+        } else {
+            tracing::info!("Warm pool disabled");
+            None
+        };
+
+        Self {
+            manager,
+            config,
+            pool,
+        }
+    }
+
+    /// Start the warm pool filler task.
+    ///
+    /// Call this after creating the server to begin pre-warming sandboxes.
+    pub async fn start_pool(&self) {
+        if let Some(pool) = &self.pool {
+            pool.lock().await.start();
+            tracing::info!("Warm pool started");
+        }
+    }
+
+    /// Gracefully shutdown the warm pool.
+    ///
+    /// Call this before stopping the server to clean up pooled sandboxes.
+    pub async fn shutdown_pool(&self) {
+        if let Some(pool) = &self.pool {
+            if let Err(e) = pool.lock().await.shutdown().await {
+                tracing::error!(error = %e, "Pool shutdown failed");
+            }
+        }
     }
 
     /// Get a reference to the sandbox manager.
@@ -140,7 +193,40 @@ impl PettyServer {
 
         tracing::info!("Creating sandbox with params: {:?}", params);
 
-        // Build sandbox config using manager defaults + optional overrides
+        // Try to acquire from warm pool first
+        if let Some(pool) = &self.pool {
+            let acquire_result = {
+                let pool_guard = pool.lock().await;
+                pool_guard.acquire().await
+            };
+
+            match acquire_result {
+                Ok(sandbox) => {
+                    // Register the pooled sandbox with manager for lifecycle tracking
+                    match self.manager.register(sandbox).await {
+                        Ok(id) => {
+                            tracing::info!(sandbox_id = %id, "Acquired sandbox from warm pool");
+                            return Self::json_result(&CreateSandboxResult {
+                                sandbox_id: id.to_string(),
+                            });
+                        }
+                        Err((e, sandbox)) => {
+                            // Registration failed - must destroy sandbox to prevent leak
+                            tracing::error!(error = %e, "Failed to register pooled sandbox, destroying");
+                            if let Err(destroy_err) = sandbox.destroy().await {
+                                tracing::error!(error = %destroy_err, "Failed to destroy unregistered sandbox");
+                            }
+                            // Fall through to cold-start
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Pool acquire failed, falling back to cold-start");
+                }
+            }
+        }
+
+        // Fallback: cold-start path (original behavior)
         let mut config_builder = SandboxConfig::builder()
             .kernel(&self.config.kernel_path)
             .rootfs(&self.config.rootfs_path);
@@ -160,7 +246,7 @@ impl PettyServer {
 
         match self.manager.create(sandbox_config).await {
             Ok(id) => {
-                tracing::info!("Created sandbox: {id}");
+                tracing::info!(sandbox_id = %id, "Created sandbox via cold-start");
                 Self::json_result(&CreateSandboxResult {
                     sandbox_id: id.to_string(),
                 })
