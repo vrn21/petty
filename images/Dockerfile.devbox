@@ -33,28 +33,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Debugging
     strace \
     gdb \
-    # Build essentials for native modules
+    # Build essentials
     build-essential \
     pkg-config \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /usr/share/doc /usr/share/man /usr/share/info
-
-# === PYTHON ===
-RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmake \
+    clang \
+    # Python
     python3 \
     python3-pip \
     python3-venv \
     python3-dev \
+    # Shell tools
+    shellcheck \
     && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/share/doc /usr/share/man /usr/share/info \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
 # === NODE.JS 20 ===
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g npm@latest
+    && npm install -g npm@latest \
+    && npm cache clean --force
 
-# === RUST (via rustup, minimal) ===
+# === RUST ===
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
@@ -63,43 +65,27 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     && rustup component add clippy rustfmt \
     && rm -rf /usr/local/rustup/toolchains/*/share/doc
 
-# === C/C++ (already have build-essential, add cmake and clang) ===
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    cmake \
-    clang \
-    && rm -rf /var/lib/apt/lists/*
-
-# === SHELL TOOLS ===
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    shellcheck \
-    && rm -rf /var/lib/apt/lists/*
-
 # === PETTY AGENT ===
 COPY petty-agent /usr/local/bin/petty-agent
 RUN chmod +x /usr/local/bin/petty-agent
 
 # === SYSTEMD SERVICE FOR PETTY AGENT ===
-# Copy service file and enable via symlink (systemctl doesn't work during build)
 COPY petty-agent.service /etc/systemd/system/petty-agent.service
 RUN mkdir -p /etc/systemd/system/multi-user.target.wants && \
     ln -sf /etc/systemd/system/petty-agent.service \
     /etc/systemd/system/multi-user.target.wants/petty-agent.service
 
 # === NETWORK CONFIGURATION ===
-# Configure eth0 with DHCP (proper newlines, not literal \n)
 RUN mkdir -p /etc/network && \
     printf 'auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp\n' > /etc/network/interfaces
 
 # === FILESYSTEM TABLE ===
-# Define root mount for systemd
 RUN printf '/dev/vda / ext4 defaults 0 1\n' > /etc/fstab
 
 # === ROOT USER SETUP ===
-# Set empty root password (or use 'root' as password for debugging)
 RUN echo 'root:root' | chpasswd
 
-# === SERIAL CONSOLE (for debugging via Firecracker) ===
-# Enable getty on ttyS0 for serial console access
+# === SERIAL CONSOLE ===
 RUN mkdir -p /etc/systemd/system/getty.target.wants && \
     ln -sf /lib/systemd/system/serial-getty@.service \
     /etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service
@@ -107,13 +93,11 @@ RUN mkdir -p /etc/systemd/system/getty.target.wants && \
 # === HOSTNAME ===
 RUN echo 'petty' > /etc/hostname
 
-# === CLEANUP ===
+# === FINAL CLEANUP ===
 RUN apt-get clean \
-    && rm -rf /tmp/* /var/tmp/* \
+    && rm -rf /tmp/* /var/tmp/* /var/cache/apt/* \
     && find /var/log -type f -exec truncate -s 0 {} \;
 
-# Set default shell
 ENV SHELL=/bin/bash
 WORKDIR /root
-
 CMD ["/sbin/init"]

@@ -24,7 +24,7 @@ endif
 # ============================================================================
 # OTHER CONFIGURATION
 # ============================================================================
-IMAGE_SIZE ?= 1500M
+IMAGE_SIZE ?= 2500M
 IMAGE_NAME ?= petty-devbox
 OUTPUT_DIR := images/output
 AGENT_BINARY := $(OUTPUT_DIR)/petty-agent

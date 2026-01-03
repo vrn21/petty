@@ -19,7 +19,7 @@ RUN rustup target add ${RUST_TARGET}
 WORKDIR /build
 
 # Copy Cargo files first for better layer caching
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 
 # Create dummy crate structure for dependency caching
 RUN mkdir -p crates/petty-agent/src crates/petty-core/src crates/petty-vm/src crates/petty-mcp/src && \
