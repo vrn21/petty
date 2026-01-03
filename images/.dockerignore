@@ -2,7 +2,7 @@
 target/
 output/
 *.ext4
-rootfs.tar
+#rootfs.tar
 
 # Git
 .git/

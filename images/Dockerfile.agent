@@ -1,0 +1,51 @@
+# Dockerfile.agent - Cross-compile petty-agent inside Docker
+# This allows building Linux musl binaries from macOS without cross-toolchains
+
+FROM rust:slim-bookworm AS builder
+
+# Install musl target and required tools
+# Note: For cross-arch builds (ARM64 on x86 or vice versa), Docker's QEMU
+# emulation handles this transparently when using --platform flag
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    musl-tools \
+    musl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add the musl target for the current architecture
+ARG RUST_TARGET=aarch64-unknown-linux-musl
+RUN rustup target add ${RUST_TARGET}
+
+# Create workspace
+WORKDIR /build
+
+# Copy Cargo files first for better layer caching
+COPY Cargo.toml Cargo.lock ./
+
+# Create dummy crate structure for dependency caching
+RUN mkdir -p crates/petty-agent/src crates/petty-core/src crates/petty-vm/src crates/petty-mcp/src && \
+    echo "fn main() {}" > crates/petty-agent/src/main.rs && \
+    echo "" > crates/petty-core/src/lib.rs && \
+    echo "" > crates/petty-vm/src/lib.rs && \
+    echo "" > crates/petty-mcp/src/lib.rs
+
+# Copy all Cargo.toml files
+COPY crates/petty-agent/Cargo.toml crates/petty-agent/
+COPY crates/petty-core/Cargo.toml crates/petty-core/
+COPY crates/petty-vm/Cargo.toml crates/petty-vm/
+COPY crates/petty-mcp/Cargo.toml crates/petty-mcp/
+
+# Build dependencies only (cached layer)
+RUN cargo build -p petty-agent --release --target ${RUST_TARGET} 2>/dev/null || true
+
+# Now copy actual source code
+COPY crates ./crates
+
+# Build the agent for real
+RUN cargo build -p petty-agent --release --target ${RUST_TARGET}
+
+# Copy the binary to a known location
+RUN cp /build/target/${RUST_TARGET}/release/petty-agent /petty-agent
+
+# Output stage - just the binary
+FROM scratch
+COPY --from=builder /petty-agent /petty-agent

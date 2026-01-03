@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 \
     iputils-ping \
     dnsutils \
+    ifupdown \
+    isc-dhcp-client \
     ca-certificates \
     openssh-client \
     curl \
@@ -85,7 +87,8 @@ RUN mkdir -p /etc/systemd/system/multi-user.target.wants && \
 
 # === NETWORK CONFIGURATION ===
 # Configure eth0 with DHCP (proper newlines, not literal \n)
-RUN printf 'auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp\n' > /etc/network/interfaces
+RUN mkdir -p /etc/network && \
+    printf 'auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp\n' > /etc/network/interfaces
 
 # === FILESYSTEM TABLE ===
 # Define root mount for systemd
