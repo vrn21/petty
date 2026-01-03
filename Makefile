@@ -24,7 +24,7 @@ endif
 # ============================================================================
 # OTHER CONFIGURATION
 # ============================================================================
-IMAGE_SIZE ?= 2G
+IMAGE_SIZE ?= 1500M
 IMAGE_NAME ?= petty-devbox
 OUTPUT_DIR := images/output
 AGENT_BINARY := $(OUTPUT_DIR)/petty-agent
@@ -106,6 +106,8 @@ $(OUTPUT_DIR)/rootfs.tar: docker-image
 	docker create --platform $(DOCKER_PLATFORM) --name petty-export-temp $(IMAGE_NAME)
 	docker export petty-export-temp > $@
 	docker rm petty-export-temp
+	@echo "==> Cleaning up Docker build cache to save space..."
+	@docker builder prune -f 2>/dev/null || true
 	@echo "✓ Rootfs tarball: $@"
 	@ls -lh $@
 
@@ -120,7 +122,9 @@ $(OUTPUT_DIR)/debian-devbox.ext4: $(OUTPUT_DIR)/rootfs.tar
 		-f images/Dockerfile.ext4 \
 		--output type=local,dest=$(OUTPUT_DIR) \
 		images/
-	@rm -f images/rootfs.tar
+	@rm -f images/rootfs.tar $(OUTPUT_DIR)/rootfs.tar
+	@echo "==> Final cleanup..."
+	@docker builder prune -f 2>/dev/null || true
 	@echo "✓ ext4 image built: $@"
 
 # Clean generated files
