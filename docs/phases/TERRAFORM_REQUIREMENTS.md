@@ -255,8 +255,8 @@ provider "aws" {
 | `environment`       | string       | `"production"`                                                            | No       | Environment tag     |
 | `ssh_key_name`      | string       | -                                                                         | **Yes**  | EC2 key pair name   |
 | `instance_type`     | string       | `"c5.metal"`                                                              | No       | Must support KVM    |
-| `docker_image`      | string       | `"ghcr.io/vrn21/bouvet-mcp:latest"`                                        | No       | Container image     |
-| `rootfs_url`        | string       | `"https://bouvet-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4"` | No       | Rootfs download URL |
+| `docker_image`      | string       | `"ghcr.io/vrn21/bouvet-mcp:latest"`                                       | No       | Container image     |
+| `rootfs_url`        | string       | `"https://petty-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4"` | No       | Rootfs download URL |
 | `allowed_ssh_cidrs` | list(string) | `["0.0.0.0/0"]`                                                           | No       | SSH allowed CIDRs   |
 | `volume_size`       | number       | `50`                                                                      | No       | Root volume GB      |
 
@@ -301,9 +301,9 @@ Create these resources:
 
 | Resource                      | Name     | Configuration                                |
 | ----------------------------- | -------- | -------------------------------------------- |
-| `aws_vpc`                     | `bouvet`  | CIDR: `10.0.0.0/16`, DNS hostnames enabled   |
+| `aws_vpc`                     | `bouvet` | CIDR: `10.0.0.0/16`, DNS hostnames enabled   |
 | `aws_subnet`                  | `public` | CIDR: `10.0.1.0/24`, map public IP on launch |
-| `aws_internet_gateway`        | `bouvet`  | Attached to VPC                              |
+| `aws_internet_gateway`        | `bouvet` | Attached to VPC                              |
 | `aws_route_table`             | `public` | Route `0.0.0.0/0` → IGW                      |
 | `aws_route_table_association` | -        | Associate subnet with route table            |
 
@@ -413,9 +413,9 @@ echo "=== Bouvet Bootstrap Complete: $(date) ==="
 
 | Output         | Value                                                        | Description                            |
 | -------------- | ------------------------------------------------------------ | -------------------------------------- |
-| `instance_id`  | `aws_instance.bouvet.id`                                      | EC2 instance ID                        |
-| `public_ip`    | `aws_eip.bouvet.public_ip`                                    | Elastic IP address                     |
-| `private_ip`   | `aws_instance.bouvet.private_ip`                              | Private IP                             |
+| `instance_id`  | `aws_instance.bouvet.id`                                     | EC2 instance ID                        |
+| `public_ip`    | `aws_eip.bouvet.public_ip`                                   | Elastic IP address                     |
+| `private_ip`   | `aws_instance.bouvet.private_ip`                             | Private IP                             |
 | `ssh_command`  | `"ssh -i ~/.ssh/${var.ssh_key_name}.pem admin@${public_ip}"` | SSH command (Debian uses `admin` user) |
 | `mcp_endpoint` | `"http://${public_ip}:8080/mcp"`                             | MCP endpoint URL                       |
 | `health_url`   | `"http://${public_ip}:8080/health"`                          | Health check URL                       |

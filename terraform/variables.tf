@@ -47,7 +47,7 @@ variable "docker_image" {
 variable "rootfs_url" {
   description = "Public URL to download the rootfs image"
   type        = string
-  default     = "https://bouvet-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4"
+  default     = "https://petty-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4"
 }
 
 variable "allowed_ssh_cidrs" {
