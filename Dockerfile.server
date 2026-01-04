@@ -103,10 +103,6 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # SSL certificates
     ca-certificates \
-    # Process utilities
-    procps \
-    # Network utilities (debugging)
-    iproute2 \
     # Required for healthcheck and rootfs download
     curl \
     && rm -rf /var/lib/apt/lists/* \
