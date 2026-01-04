@@ -3,7 +3,7 @@
 # entrypoint.sh - Docker entrypoint for petty-mcp server
 # =============================================================================
 # This script:
-# 1. Fetches rootfs from S3 if not present locally
+# 1. Fetches rootfs from public URL if not present locally
 # 2. Verifies required binaries and kernel exist
 # 3. Configures KVM permissions
 # 4. Starts the petty-mcp server
@@ -20,9 +20,9 @@ echo ""
 # Rootfs handling
 # -----------------------------------------------------------------------------
 if [ ! -f "$PETTY_ROOTFS" ]; then
-    if [ -n "$PETTY_ROOTFS_S3_URL" ]; then
-        echo "[1/4] Rootfs not found locally, fetching from S3..."
-        echo "      Source: $PETTY_ROOTFS_S3_URL"
+    if [ -n "$PETTY_ROOTFS_URL" ]; then
+        echo "[1/4] Rootfs not found locally, downloading..."
+        echo "      Source: $PETTY_ROOTFS_URL"
         echo "      Destination: $PETTY_ROOTFS"
         
         # Check disk space (need at least 3GB for rootfs + overhead)
@@ -36,14 +36,14 @@ if [ ! -f "$PETTY_ROOTFS" ]; then
             exit 1
         fi
         
-        # Download rootfs
-        if ! aws s3 cp "$PETTY_ROOTFS_S3_URL" "$PETTY_ROOTFS" --only-show-errors; then
+        # Download rootfs using curl (works with public S3 URLs)
+        echo "      Downloading..."
+        if ! curl -fSL --progress-bar -o "$PETTY_ROOTFS" "$PETTY_ROOTFS_URL"; then
             echo ""
-            echo "ERROR: Failed to download rootfs from S3"
-            echo "  Make sure AWS credentials are configured:"
-            echo "    - IAM instance role (on EC2)"
-            echo "    - AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY env vars"
-            echo "    - AWS_REGION or AWS_DEFAULT_REGION env var"
+            echo "ERROR: Failed to download rootfs"
+            echo "  URL: $PETTY_ROOTFS_URL"
+            echo ""
+            echo "  Make sure the URL is accessible (public S3 bucket or valid URL)"
             rm -f "$PETTY_ROOTFS"  # Clean up partial download
             exit 1
         fi
@@ -56,8 +56,8 @@ if [ ! -f "$PETTY_ROOTFS" ]; then
         echo "  Option 1: Mount a rootfs volume"
         echo "    docker run -v /path/to/rootfs.ext4:$PETTY_ROOTFS ..."
         echo ""
-        echo "  Option 2: Set PETTY_ROOTFS_S3_URL to fetch from S3"
-        echo "    docker run -e PETTY_ROOTFS_S3_URL=s3://bucket/rootfs.ext4 ..."
+        echo "  Option 2: Set PETTY_ROOTFS_URL to download from public URL"
+        echo "    docker run -e PETTY_ROOTFS_URL=https://bucket.s3.amazonaws.com/rootfs.ext4 ..."
         echo ""
         exit 1
     fi

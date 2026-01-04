@@ -19,7 +19,8 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Chef - Dependency caching for faster rebuilds
 # -----------------------------------------------------------------------------
-FROM rust:1.83-bookworm AS chef
+# NOTE: Using nightly because rmcp-macros requires edition2024
+FROM rustlang/rust:nightly-bookworm AS chef
 
 RUN cargo install cargo-chef --locked
 WORKDIR /app
@@ -30,7 +31,8 @@ WORKDIR /app
 FROM chef AS planner
 
 # Copy only what's needed for dependency resolution
-COPY Cargo.toml Cargo.lock ./
+# NOTE: Cargo.lock is gitignored, so we don't copy it - cargo will resolve fresh
+COPY Cargo.toml ./
 COPY crates ./crates
 
 # Generate the recipe file for dependencies
@@ -73,37 +75,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /downloads
 
-# Firecracker version and architecture
-ARG FC_VERSION=1.5.1
+# Firecracker version
+ARG FC_VERSION=1.5.0
 ARG TARGETARCH
 
-# Map Docker architecture to Firecracker architecture and download
-# NOTE: Firecracker releases are .tgz archives containing binaries
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-    FC_ARCH="aarch64"; \
-    KERNEL_ARCH="aarch64"; \
+# Copy and run the download script
+COPY scripts/download-binaries.sh /download-binaries.sh
+RUN chmod +x /download-binaries.sh && \
+    if [ "$TARGETARCH" = "arm64" ]; then \
+    /download-binaries.sh aarch64 "$FC_VERSION"; \
     else \
-    FC_ARCH="x86_64"; \
-    KERNEL_ARCH="x86_64"; \
-    fi && \
-    # Download and extract Firecracker release tarball
-    echo "Downloading Firecracker v${FC_VERSION} for ${FC_ARCH}..." && \
-    curl -sSL -o firecracker.tgz \
-    "https://github.com/firecracker-microvm/firecracker/releases/download/v${FC_VERSION}/firecracker-v${FC_VERSION}-${FC_ARCH}.tgz" && \
-    tar -xzf firecracker.tgz && \
-    mv "release-v${FC_VERSION}-${FC_ARCH}/firecracker-v${FC_VERSION}-${FC_ARCH}" firecracker && \
-    mv "release-v${FC_VERSION}-${FC_ARCH}/jailer-v${FC_VERSION}-${FC_ARCH}" jailer && \
-    chmod +x firecracker jailer && \
-    rm -rf firecracker.tgz "release-v${FC_VERSION}-${FC_ARCH}" && \
-    # Download Kernel
-    echo "Downloading kernel for ${KERNEL_ARCH}..." && \
-    curl -sSL -o vmlinux \
-    "https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/${KERNEL_ARCH}/kernels/vmlinux.bin"
-
-# Verify downloads
-RUN ls -la /downloads && \
-    ./firecracker --version && \
-    echo "Firecracker binary size: $(du -h firecracker | cut -f1)"
+    /download-binaries.sh x86_64 "$FC_VERSION"; \
+    fi
 
 # -----------------------------------------------------------------------------
 # Stage 5: Runtime - Final minimal production image
@@ -118,15 +101,13 @@ LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Required for AWS S3 access (fetching rootfs)
-    awscli \
     # SSL certificates
     ca-certificates \
     # Process utilities
     procps \
     # Network utilities (debugging)
     iproute2 \
-    # Required for healthcheck
+    # Required for healthcheck and rootfs download
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /var/cache/apt/*
@@ -153,6 +134,7 @@ RUN chmod +x /usr/local/bin/petty-mcp \
 # Environment variables with defaults
 ENV PETTY_KERNEL=/var/lib/petty/vmlinux
 ENV PETTY_ROOTFS=/var/lib/petty/debian-devbox.ext4
+ENV PETTY_ROOTFS_URL=https://petty-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4
 ENV PETTY_FIRECRACKER=/usr/local/bin/firecracker
 ENV PETTY_CHROOT=/tmp/petty
 ENV PETTY_POOL_ENABLED=true
@@ -161,6 +143,7 @@ ENV PETTY_TRANSPORT=both
 ENV PETTY_HTTP_HOST=0.0.0.0
 ENV PETTY_HTTP_PORT=8080
 ENV RUST_LOG=info
+
 
 # Expose HTTP port
 EXPOSE 8080

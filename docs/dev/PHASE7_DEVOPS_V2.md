@@ -528,7 +528,7 @@ No code changes needed - just set the environment variables in systemd unit.
 
 - [ ] AMI baking (pre-compile petty-mcp for instant boot)
 - [ ] Automated image building (EC2 runs `make rootfs`)
-- [ ] HTTP transport for remote MCP access
-- [ ] Health endpoint in petty-mcp
+- [x] HTTP transport for remote MCP access ✅ (implemented)
+- [x] Health endpoint in petty-mcp ✅ (implemented)
 - [ ] CloudWatch metrics and alarms
 - [ ] Spot interruption handling (graceful shutdown)

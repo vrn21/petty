@@ -95,8 +95,8 @@ impl Default for PettyConfig {
     fn default() -> Self {
         Self {
             kernel_path: PathBuf::from("/var/lib/petty/vmlinux"),
-            rootfs_path: PathBuf::from("/var/lib/petty/debian.ext4"),
-            firecracker_path: PathBuf::from("/usr/bin/firecracker"),
+            rootfs_path: PathBuf::from("/var/lib/petty/debian-devbox.ext4"),
+            firecracker_path: PathBuf::from("/usr/local/bin/firecracker"),
             chroot_path: PathBuf::from("/tmp/petty"),
             pool_enabled: true,
             pool_min_size: 3,
@@ -113,8 +113,8 @@ impl PettyConfig {
     /// | Variable | Default |
     /// |----------|---------|
     /// | `PETTY_KERNEL` | `/var/lib/petty/vmlinux` |
-    /// | `PETTY_ROOTFS` | `/var/lib/petty/debian.ext4` |
-    /// | `PETTY_FIRECRACKER` | `/usr/bin/firecracker` |
+    /// | `PETTY_ROOTFS` | `/var/lib/petty/debian-devbox.ext4` |
+    /// | `PETTY_FIRECRACKER` | `/usr/local/bin/firecracker` |
     /// | `PETTY_CHROOT` | `/tmp/petty` |
     /// | `PETTY_POOL_ENABLED` | `true` |
     /// | `PETTY_POOL_MIN_SIZE` | `3` |
