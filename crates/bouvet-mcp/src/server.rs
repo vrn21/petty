@@ -1,12 +1,12 @@
-//! PettyServer - MCP server that exposes sandbox operations as tools.
+//! BouvetServer - MCP server that exposes sandbox operations as tools.
 //!
 //! This module implements the core MCP server manually implementing ServerHandler
 //! to expose sandbox lifecycle, code execution, and file operation tools.
 
-use crate::config::{PettyConfig, MAX_COMMAND_LENGTH, MAX_INPUT_SIZE_BYTES};
+use crate::config::{BouvetConfig, MAX_COMMAND_LENGTH, MAX_INPUT_SIZE_BYTES};
 use crate::types::*;
 
-use petty_core::{ManagerConfig, PoolConfig, SandboxConfig, SandboxManager, SandboxPool};
+use bouvet_core::{ManagerConfig, PoolConfig, SandboxConfig, SandboxManager, SandboxPool};
 use rmcp::{
     handler::server::ServerHandler,
     model::*,
@@ -17,25 +17,25 @@ use schemars::schema_for;
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
-/// MCP server for Petty sandbox operations.
+/// MCP server for Bouvet sandbox operations.
 ///
 /// This server exposes sandbox management, code execution, and file operations
 /// as MCP tools that AI agents can invoke.
 #[derive(Clone)]
-pub struct PettyServer {
-    /// Sandbox manager from petty-core
+pub struct BouvetServer {
+    /// Sandbox manager from bouvet-core
     manager: Arc<SandboxManager>,
 
     /// Configuration
-    config: PettyConfig,
+    config: BouvetConfig,
 
     /// Warm sandbox pool (optional, based on config)
     pool: Option<Arc<TokioMutex<SandboxPool>>>,
 }
 
-impl PettyServer {
-    /// Create a new PettyServer with the given configuration.
-    pub fn new(config: PettyConfig) -> Self {
+impl BouvetServer {
+    /// Create a new BouvetServer with the given configuration.
+    pub fn new(config: BouvetConfig) -> Self {
         let manager_config = ManagerConfig::new(
             &config.kernel_path,
             &config.rootfs_path,
@@ -110,15 +110,15 @@ impl PettyServer {
     }
 
     /// Get a reference to the configuration.
-    pub fn config(&self) -> &PettyConfig {
+    pub fn config(&self) -> &BouvetConfig {
         &self.config
     }
 
     /// Parse a sandbox ID from string.
     /// Uses a generic error message to prevent ID enumeration.
-    fn parse_sandbox_id(id: &str) -> Result<petty_core::SandboxId, String> {
+    fn parse_sandbox_id(id: &str) -> Result<bouvet_core::SandboxId, String> {
         uuid::Uuid::parse_str(id)
-            .map(petty_core::SandboxId::from)
+            .map(bouvet_core::SandboxId::from)
             .map_err(|_| "Sandbox not found or invalid ID".to_string())
     }
 
@@ -549,14 +549,14 @@ impl PettyServer {
 // ServerHandler Implementation
 // ============================================================================
 
-impl ServerHandler for PettyServer {
+impl ServerHandler for BouvetServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             protocol_version: ProtocolVersion::V_2024_11_05,
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             server_info: Implementation::from_build_env(),
             instructions: Some(
-                "Petty MCP Server - Create and manage isolated code execution sandboxes. \
+                "Bouvet MCP Server - Create and manage isolated code execution sandboxes. \
                  Use create_sandbox to start a new sandbox, then execute_code or run_command \
                  to run code. Use read_file, write_file, and list_directory for file operations. \
                  Don't forget to destroy_sandbox when done."
@@ -605,19 +605,19 @@ mod tests {
     #[test]
     fn test_parse_sandbox_id_valid() {
         let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
-        let result = PettyServer::parse_sandbox_id(uuid_str);
+        let result = BouvetServer::parse_sandbox_id(uuid_str);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_parse_sandbox_id_invalid() {
-        let result = PettyServer::parse_sandbox_id("invalid");
+        let result = BouvetServer::parse_sandbox_id("invalid");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_build_tools_list() {
-        let tools = PettyServer::build_tools_list();
+        let tools = BouvetServer::build_tools_list();
         assert_eq!(tools.len(), 8);
         assert!(tools.iter().any(|t| t.name.as_ref() == "create_sandbox"));
         assert!(tools.iter().any(|t| t.name.as_ref() == "destroy_sandbox"));

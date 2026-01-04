@@ -1,4 +1,4 @@
-//! Request handler for petty-agent.
+//! Request handler for bouvet-agent.
 //!
 //! Routes JSON-RPC requests to the appropriate handlers.
 

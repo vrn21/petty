@@ -1,4 +1,4 @@
-# Phase 3: petty-core
+# Phase 3: bouvet-core
 
 > Sandbox orchestration layer connecting VMs to guest agents.
 
@@ -23,7 +23,7 @@ A running microVM with an active connection to its guest agent. Represents a com
 
 ### AgentClient
 
-A client that communicates with `petty-agent` running inside the VM via Firecracker's vsock Unix socket.
+A client that communicates with `bouvet-agent` running inside the VM via Firecracker's vsock Unix socket.
 
 ### SandboxManager
 
@@ -35,7 +35,7 @@ Manages the lifecycle of multiple sandboxes, providing create/get/destroy operat
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                    petty-core (host)                     │
+│                    bouvet-core (host)                     │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
 │  ┌─────────────────┐     ┌──────────────────────────┐   │
@@ -48,7 +48,7 @@ Manages the lifecycle of multiple sandboxes, providing create/get/destroy operat
 │           ▼                                              │
 │  ┌─────────────────┐     ┌──────────────────────────┐   │
 │  │    Sandbox      │────▶│   VirtualMachine         │   │
-│  │  - execute()    │     │   (from petty-vm)        │   │
+│  │  - execute()    │     │   (from bouvet-vm)        │   │
 │  │  - read_file()  │     └──────────────────────────┘   │
 │  │  - write_file() │                │                   │
 │  └─────────────────┘                │ vsock             │
@@ -63,7 +63,7 @@ Manages the lifecycle of multiple sandboxes, providing create/get/destroy operat
                           │
                           ▼
 ┌──────────────────────────────────────────────────────────┐
-│                  petty-agent (guest)                     │
+│                  bouvet-agent (guest)                     │
 │              Listening on vsock port 52                  │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -73,7 +73,7 @@ Manages the lifecycle of multiple sandboxes, providing create/get/destroy operat
 ## File Structure
 
 ```
-crates/petty-core/
+crates/bouvet-core/
 ├── Cargo.toml
 └── src/
     ├── lib.rs        # Public exports
@@ -111,7 +111,7 @@ Configuration for creating a new sandbox.
 
 ### 2. AgentClient
 
-Communicates with petty-agent inside the VM.
+Communicates with bouvet-agent inside the VM.
 
 **Connection Protocol (Firecracker vsock):**
 
@@ -152,7 +152,7 @@ A running sandbox with VM and agent connection.
 **Fields:**
 
 - `id` - Unique identifier (UUID)
-- `vm` - VirtualMachine from petty-vm
+- `vm` - VirtualMachine from bouvet-vm
 - `client` - AgentClient for communication
 - `config` - SandboxConfig used to create it
 - `created_at` - Creation timestamp
@@ -213,7 +213,7 @@ Manages multiple sandbox instances.
 
 **CoreError enum:**
 
-- `Vm(VmError)` - From petty-vm
+- `Vm(VmError)` - From bouvet-vm
 - `Connection(String)` - vsock connection failed
 - `AgentTimeout` - Agent not responding
 - `Rpc { code, message }` - JSON-RPC error from agent
@@ -226,7 +226,7 @@ Manages multiple sandbox instances.
 
 ### Task 1: Create Crate Structure
 
-- Set up Cargo.toml with dependencies on petty-vm
+- Set up Cargo.toml with dependencies on bouvet-vm
 - Create module files
 - Define public exports in lib.rs
 
@@ -272,7 +272,7 @@ Manages multiple sandbox instances.
 
 **Required crates:**
 
-- `petty-vm` - VM management
+- `bouvet-vm` - VM management
 - `tokio` - Async runtime, UnixStream, timeouts
 - `serde` / `serde_json` - JSON-RPC serialization
 - `uuid` - Sandbox IDs
@@ -286,7 +286,7 @@ Manages multiple sandbox instances.
 ### Sandbox Creation Flow
 
 1. Validate SandboxConfig
-2. Create VirtualMachine via petty-vm (with vsock enabled)
+2. Create VirtualMachine via bouvet-vm (with vsock enabled)
 3. Wait for VM to boot (vsock socket appears)
 4. Connect AgentClient to vsock
 5. Wait for agent ready (ping succeeds)
@@ -323,6 +323,6 @@ Manages multiple sandbox instances.
 ## Testing Notes
 
 - Unit tests for config validation and error types
-- Integration tests require petty-vm and petty-agent
+- Integration tests require bouvet-vm and bouvet-agent
 - Mock AgentClient for unit testing Sandbox logic
 - End-to-end tests with real VMs (Linux + KVM only)

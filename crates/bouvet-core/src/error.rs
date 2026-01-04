@@ -1,17 +1,17 @@
-//! Error types for petty-core.
+//! Error types for bouvet-core.
 
 use crate::SandboxId;
 use thiserror::Error;
 
-/// Result type alias for petty-core operations.
+/// Result type alias for bouvet-core operations.
 pub type Result<T> = std::result::Result<T, CoreError>;
 
 /// Errors that can occur during sandbox operations.
 #[derive(Debug, Error)]
 pub enum CoreError {
-    /// Error from petty-vm
+    /// Error from bouvet-vm
     #[error("VM error: {0}")]
-    Vm(#[from] petty_vm::VmError),
+    Vm(#[from] bouvet_vm::VmError),
 
     /// Failed to connect to guest agent
     #[error("connection failed: {0}")]

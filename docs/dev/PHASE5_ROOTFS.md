@@ -1,6 +1,6 @@
 # Phase 5: Rootfs Images
 
-> Debian-based ext4 images with petty-agent and language toolchains.
+> Debian-based ext4 images with bouvet-agent and language toolchains.
 
 ---
 
@@ -9,10 +9,10 @@
 Create ext4 root filesystem images for Firecracker microVMs that include:
 
 1. Minimal Debian base (bookworm-slim)
-2. Compiled petty-agent binary
+2. Compiled bouvet-agent binary
 3. Language development toolchains (Python, Node.js, Rust, C++)
 4. Common developer tools
-5. Systemd service to auto-start petty-agent
+5. Systemd service to auto-start bouvet-agent
 
 ---
 
@@ -36,7 +36,7 @@ We use a **single unified image** containing all toolchains. This is optimal for
 images/
 ├── Dockerfile.devbox           # Unified dev environment
 ├── Dockerfile.ext4             # Container → ext4 converter
-├── petty-agent.service         # Systemd unit file
+├── bouvet-agent.service         # Systemd unit file
 ├── .dockerignore               # Docker build exclusions
 └── output/
     └── debian-devbox.ext4      # Generated image
@@ -52,10 +52,10 @@ images/
 make rootfs
     │
     ├─► cargo build (x86_64-unknown-linux-musl)
-    │   └─► petty-agent binary
+    │   └─► bouvet-agent binary
     │
     ├─► docker build -f Dockerfile.devbox
-    │   └─► petty-devbox:latest
+    │   └─► bouvet-devbox:latest
     │
     ├─► docker export → rootfs.tar
     │
@@ -136,25 +136,25 @@ IMAGE_SIZE=4G make rootfs
 
 - bash, shellcheck
 
-### Petty Agent
+### Bouvet Agent
 
-- `/usr/local/bin/petty-agent` (static musl binary)
+- `/usr/local/bin/bouvet-agent` (static musl binary)
 - systemd service auto-starts on boot
 
 ---
 
 ## Systemd Service
 
-File: `/etc/systemd/system/petty-agent.service`
+File: `/etc/systemd/system/bouvet-agent.service`
 
 ```ini
 [Unit]
-Description=Petty Guest Agent
+Description=Bouvet Guest Agent
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/petty-agent
+ExecStart=/usr/local/bin/bouvet-agent
 Restart=always
 RestartSec=1
 
@@ -170,7 +170,7 @@ WantedBy=multi-user.target
 2. **--no-install-recommends** with apt-get
 3. **Clean apt cache** after each layer: `rm -rf /var/lib/apt/lists/*`
 4. **Remove docs/man pages**: `rm -rf /usr/share/doc /usr/share/man`
-5. **Static petty-agent binary** (musl, no runtime deps)
+5. **Static bouvet-agent binary** (musl, no runtime deps)
 6. **Shrink ext4** after creation: `resize2fs -M`
 
 ---
@@ -190,7 +190,7 @@ A compatible Linux kernel is also needed. Options:
 | Variable     | Default        | Description       |
 | ------------ | -------------- | ----------------- |
 | `IMAGE_SIZE` | `2G`           | ext4 image size   |
-| `IMAGE_NAME` | `petty-devbox` | Docker image name |
+| `IMAGE_NAME` | `bouvet-devbox` | Docker image name |
 
 ---
 
@@ -198,7 +198,7 @@ A compatible Linux kernel is also needed. Options:
 
 - [x] Build works on macOS (via Docker)
 - [ ] `make rootfs` produces valid ext4 image
-- [ ] Image boots and petty-agent starts
+- [ ] Image boots and bouvet-agent starts
 - [ ] Python, Node, Rust, C++ toolchains work
 - [ ] Image size under 2 GB
 - [ ] Common dev tools available (git, vim, etc.)

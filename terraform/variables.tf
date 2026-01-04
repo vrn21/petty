@@ -1,7 +1,7 @@
 # =============================================================================
 # variables.tf - Input Variables
 # =============================================================================
-# All configurable parameters for the petty-mcp deployment.
+# All configurable parameters for the bouvet-mcp deployment.
 # =============================================================================
 
 variable "aws_region" {
@@ -39,15 +39,15 @@ variable "instance_type" {
 }
 
 variable "docker_image" {
-  description = "Docker image for petty-mcp server"
+  description = "Docker image for bouvet-mcp server"
   type        = string
-  default     = "ghcr.io/vrn21/petty-mcp:latest"
+  default     = "ghcr.io/vrn21/bouvet-mcp:latest"
 }
 
 variable "rootfs_url" {
   description = "Public URL to download the rootfs image"
   type        = string
-  default     = "https://petty-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4"
+  default     = "https://bouvet-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4"
 }
 
 variable "allowed_ssh_cidrs" {

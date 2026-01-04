@@ -6,7 +6,7 @@
 # 1. Update system packages
 # 2. Install Docker
 # 3. Configure KVM permissions (persistent)
-# 4. Create systemd service for petty-mcp
+# 4. Create systemd service for bouvet-mcp
 # 5. Start the service
 #
 # Template variables (replaced by Terraform):
@@ -16,10 +16,10 @@
 
 set -euo pipefail
 
-LOG_FILE="/var/log/petty-bootstrap.log"
+LOG_FILE="/var/log/bouvet-bootstrap.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "=== Petty Bootstrap Started: $(date) ==="
+echo "=== Bouvet Bootstrap Started: $(date) ==="
 echo ""
 
 # -----------------------------------------------------------------------------
@@ -63,9 +63,9 @@ fi
 # 4. Create systemd service
 # -----------------------------------------------------------------------------
 echo "[4/5] Creating systemd service..."
-cat > /etc/systemd/system/petty-mcp.service << 'EOF'
+cat > /etc/systemd/system/bouvet-mcp.service << 'SERVICEEOF'
 [Unit]
-Description=Petty MCP Server
+Description=Bouvet MCP Server
 After=network.target docker.service
 Requires=docker.service
 
@@ -76,36 +76,36 @@ RestartSec=10
 TimeoutStartSec=300
 
 ExecStartPre=/usr/bin/docker pull ${docker_image}
-ExecStart=/usr/bin/docker run --rm --name petty-mcp \
+ExecStart=/usr/bin/docker run --rm --name bouvet-mcp \
     --privileged \
     --device=/dev/kvm \
     -p 8080:8080 \
-    -e PETTY_ROOTFS_URL=${rootfs_url} \
-    -e PETTY_TRANSPORT=both \
-    -e PETTY_HTTP_HOST=0.0.0.0 \
-    -e PETTY_HTTP_PORT=8080 \
+    -e BOUVET_ROOTFS_URL=${rootfs_url} \
+    -e BOUVET_TRANSPORT=both \
+    -e BOUVET_HTTP_HOST=0.0.0.0 \
+    -e BOUVET_HTTP_PORT=8080 \
     -e RUST_LOG=info \
     ${docker_image}
 
-ExecStop=/usr/bin/docker stop petty-mcp
+ExecStop=/usr/bin/docker stop bouvet-mcp
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SERVICEEOF
 
 echo "       Systemd service created"
 
 # -----------------------------------------------------------------------------
 # 5. Enable and start service
 # -----------------------------------------------------------------------------
-echo "[5/5] Starting petty-mcp service..."
+echo "[5/5] Starting bouvet-mcp service..."
 systemctl daemon-reload
-systemctl enable petty-mcp
-systemctl start petty-mcp
+systemctl enable bouvet-mcp
+systemctl start bouvet-mcp
 
 echo ""
-echo "=== Petty Bootstrap Complete: $(date) ==="
+echo "=== Bouvet Bootstrap Complete: $(date) ==="
 echo ""
-echo "Service status: $(systemctl is-active petty-mcp)"
-echo "View logs: journalctl -u petty-mcp -f"
+echo "Service status: $(systemctl is-active bouvet-mcp)"
+echo "View logs: journalctl -u bouvet-mcp -f"
 echo ""

@@ -1,8 +1,8 @@
 # =============================================================================
-# Dockerfile.server - Production Docker Image for petty-mcp
+# Dockerfile.server - Production Docker Image for bouvet-mcp
 # =============================================================================
 # This Dockerfile creates a production-ready image containing:
-# - petty-mcp server binary (compiled from source)
+# - bouvet-mcp server binary (compiled from source)
 # - Firecracker binary (downloaded from GitHub)
 # - Jailer binary (downloaded from GitHub)
 # - vmlinux kernel (downloaded from AWS S3)
@@ -10,10 +10,10 @@
 # The rootfs image is NOT included - it is fetched from S3 at runtime.
 #
 # Usage:
-#   docker build -f Dockerfile.server -t petty-mcp:latest .
+#   docker build -f Dockerfile.server -t bouvet-mcp:latest .
 #   docker run -d --privileged -p 8080:8080 \
-#     -e PETTY_ROOTFS_URL=s3://your-bucket/debian-devbox.ext4 \
-#     petty-mcp:latest
+#     -e BOUVET_ROOTFS_URL=s3://your-bucket/debian-devbox.ext4 \
+#     bouvet-mcp:latest
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -58,10 +58,10 @@ COPY Cargo.toml ./
 COPY crates ./crates
 
 # Build the actual application
-RUN cargo build --release -p petty-mcp
+RUN cargo build --release -p bouvet-mcp
 
 # Strip debug symbols for smaller binary
-RUN strip /app/target/release/petty-mcp
+RUN strip /app/target/release/bouvet-mcp
 
 # -----------------------------------------------------------------------------
 # Stage 4: Fetcher - Download external binaries
@@ -94,9 +94,9 @@ RUN chmod +x /download-binaries.sh && \
 FROM debian:bookworm-slim AS runtime
 
 # Labels for container metadata
-LABEL org.opencontainers.image.title="petty-mcp"
+LABEL org.opencontainers.image.title="bouvet-mcp"
 LABEL org.opencontainers.image.description="MCP server for isolated code execution sandboxes"
-LABEL org.opencontainers.image.source="https://github.com/vrn21/petty"
+LABEL org.opencontainers.image.source="https://github.com/vrn21/bouvet"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Install runtime dependencies
@@ -112,32 +112,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # The container runs as root to access KVM, but the actual code runs safely
 
 # Create directories
-RUN mkdir -p /var/lib/petty \
-    && mkdir -p /tmp/petty \
-    && mkdir -p /var/log/petty
+RUN mkdir -p /var/lib/bouvet \
+    && mkdir -p /tmp/bouvet \
+    && mkdir -p /var/log/bouvet
 
 # Copy binaries from builder stages
-COPY --from=builder /app/target/release/petty-mcp /usr/local/bin/petty-mcp
+COPY --from=builder /app/target/release/bouvet-mcp /usr/local/bin/bouvet-mcp
 COPY --from=fetcher /downloads/firecracker /usr/local/bin/firecracker
 COPY --from=fetcher /downloads/jailer /usr/local/bin/jailer
-COPY --from=fetcher /downloads/vmlinux /var/lib/petty/vmlinux
+COPY --from=fetcher /downloads/vmlinux /var/lib/bouvet/vmlinux
 
 # Ensure binaries are executable
-RUN chmod +x /usr/local/bin/petty-mcp \
+RUN chmod +x /usr/local/bin/bouvet-mcp \
     /usr/local/bin/firecracker \
     /usr/local/bin/jailer
 
 # Environment variables with defaults
-ENV PETTY_KERNEL=/var/lib/petty/vmlinux
-ENV PETTY_ROOTFS=/var/lib/petty/debian-devbox.ext4
-ENV PETTY_ROOTFS_URL=https://petty-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4
-ENV PETTY_FIRECRACKER=/usr/local/bin/firecracker
-ENV PETTY_CHROOT=/tmp/petty
-ENV PETTY_POOL_ENABLED=true
-ENV PETTY_POOL_MIN_SIZE=3
-ENV PETTY_TRANSPORT=both
-ENV PETTY_HTTP_HOST=0.0.0.0
-ENV PETTY_HTTP_PORT=8080
+ENV BOUVET_KERNEL=/var/lib/bouvet/vmlinux
+ENV BOUVET_ROOTFS=/var/lib/bouvet/debian-devbox.ext4
+ENV BOUVET_ROOTFS_URL=https://petty-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4
+ENV BOUVET_FIRECRACKER=/usr/local/bin/firecracker
+ENV BOUVET_CHROOT=/tmp/bouvet
+ENV BOUVET_POOL_ENABLED=true
+ENV BOUVET_POOL_MIN_SIZE=3
+ENV BOUVET_TRANSPORT=both
+ENV BOUVET_HTTP_HOST=0.0.0.0
+ENV BOUVET_HTTP_PORT=8080
 ENV RUST_LOG=info
 
 

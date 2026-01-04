@@ -1,21 +1,22 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/petty-vm",
-    "crates/petty-agent",
-    "crates/petty-core",
-    "crates/petty-mcp",
+    "crates/bouvet-vm",
+    "crates/bouvet-agent",
+    "crates/bouvet-core",
+    "crates/bouvet-mcp",
     # Future crates (uncomment as implemented):
-    # "crates/petty-api",
-    # "crates/petty-sdk",
+    # "crates/bouvet-api",
+    # "crates/bouvet-sdk",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-repository = "https://github.com/vrn21/petty"
+repository = "https://github.com/vrn21/bouvet"
 authors = ["vrn21"]
+
 
 [workspace.dependencies]
 # Async runtime

@@ -1,10 +1,10 @@
 [Unit]
-Description=Petty Guest Agent
+Description=Bouvet Guest Agent
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/petty-agent
+ExecStart=/usr/local/bin/bouvet-agent
 Restart=always
 RestartSec=1
 StandardOutput=journal

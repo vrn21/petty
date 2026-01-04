@@ -1,6 +1,6 @@
-# Petty-MCP Terraform Infrastructure
+# Bouvet-MCP Terraform Infrastructure
 
-Deploy petty-mcp Docker container on AWS EC2 c5.metal instance.
+Deploy bouvet-mcp Docker container on AWS EC2 c5.metal instance.
 
 ## Prerequisites
 
@@ -28,7 +28,7 @@ terraform apply -var="ssh_key_name=YOUR_KEY_NAME"
 | `ssh_key_name`      | **Required.** AWS EC2 key pair name | -                                |
 | `aws_region`        | AWS region                          | `us-east-1`                      |
 | `instance_type`     | EC2 instance type (must be .metal)  | `c5.metal`                       |
-| `docker_image`      | Container image                     | `ghcr.io/vrn21/petty-mcp:latest` |
+| `docker_image`      | Container image                     | `ghcr.io/vrn21/bouvet-mcp:latest` |
 | `allowed_ssh_cidrs` | CIDR blocks for SSH access          | `["0.0.0.0/0"]`                  |
 | `volume_size`       | Root volume size in GB              | `50`                             |
 
@@ -58,7 +58,7 @@ curl -f http://$(terraform output -raw public_ip):8080/health
 
 # SSH and view logs
 $(terraform output -raw ssh_command)
-sudo journalctl -u petty-mcp -f
+sudo journalctl -u bouvet-mcp -f
 
 # Test MCP
 curl -X POST http://$(terraform output -raw public_ip):8080/mcp \

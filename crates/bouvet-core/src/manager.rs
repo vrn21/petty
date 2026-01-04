@@ -330,7 +330,7 @@ mod tests {
             "/path/to/vmlinux",
             "/path/to/rootfs.ext4",
             "/usr/bin/firecracker",
-            "/tmp/petty",
+            "/tmp/bouvet",
         )
     }
 
@@ -343,7 +343,7 @@ mod tests {
             config.firecracker_path,
             PathBuf::from("/usr/bin/firecracker")
         );
-        assert_eq!(config.chroot_path, PathBuf::from("/tmp/petty"));
+        assert_eq!(config.chroot_path, PathBuf::from("/tmp/bouvet"));
     }
 
     #[tokio::test]

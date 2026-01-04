@@ -1,19 +1,19 @@
 [package]
-name = "petty-mcp"
+name = "bouvet-mcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "MCP server for Petty sandboxes"
+description = "MCP server for Bouvet sandboxes"
 
 [[bin]]
-name = "petty-mcp"
+name = "bouvet-mcp"
 path = "src/main.rs"
 
 [dependencies]
 # Core
-petty-core = { path = "../petty-core" }
+bouvet-core = { path = "../bouvet-core" }
 
 # MCP SDK with HTTP transport
 rmcp = { workspace = true, features = ["server", "transport-io", "transport-streamable-http-server", "macros"] }

@@ -1,6 +1,6 @@
-//! # petty-core
+//! # bouvet-core
 //!
-//! Sandbox orchestration layer for Petty agentic sandboxes.
+//! Sandbox orchestration layer for Bouvet agentic sandboxes.
 //!
 //! This crate provides a high-level API for creating and managing
 //! isolated code execution environments using Firecracker microVMs.
@@ -9,7 +9,7 @@
 //!
 //! ```text
 //! ┌──────────────────────────────────────────────────────────┐
-//! │                    petty-core (host)                     │
+//! │                    bouvet-core (host)                    │
 //! ├──────────────────────────────────────────────────────────┤
 //! │                                                          │
 //! │  ┌─────────────────┐     ┌──────────────────────────┐   │
@@ -22,7 +22,7 @@
 //! │           ▼                                              │
 //! │  ┌─────────────────┐     ┌──────────────────────────┐   │
 //! │  │    Sandbox      │────▶│   VirtualMachine         │   │
-//! │  │  - execute()    │     │   (from petty-vm)        │   │
+//! │  │  - execute()    │     │   (from bouvet-vm)       │   │
 //! │  │  - read_file()  │     └──────────────────────────┘   │
 //! │  │  - write_file() │                │ vsock             │
 //! │  └─────────────────┘                ▼                   │
@@ -37,7 +37,7 @@
 //!                           │
 //!                           ▼
 //! ┌──────────────────────────────────────────────────────────┐
-//! │                  petty-agent (guest)                     │
+//! │                  bouvet-agent (guest)                    │
 //! │              Listening on vsock port 52                  │
 //! └──────────────────────────────────────────────────────────┘
 //! ```
@@ -45,15 +45,15 @@
 //! ## Quick Start
 //!
 //! ```ignore
-//! use petty_core::{SandboxManager, SandboxConfig, ManagerConfig};
+//! use bouvet_core::{SandboxManager, SandboxConfig, ManagerConfig};
 //!
-//! # async fn example() -> petty_core::Result<()> {
+//! # async fn example() -> bouvet_core::Result<()> {
 //! // Create a sandbox manager
 //! let manager = SandboxManager::new(ManagerConfig::new(
 //!     "/path/to/vmlinux",
 //!     "/path/to/rootfs.ext4",
 //!     "/usr/bin/firecracker",
-//!     "/tmp/petty",
+//!     "/tmp/bouvet",
 //! ));
 //!
 //! // Create a sandbox with custom configuration

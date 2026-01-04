@@ -1,4 +1,4 @@
-//! Agent client for communicating with petty-agent inside a VM.
+//! Agent client for communicating with bouvet-agent inside a VM.
 //!
 //! This module implements the vsock connection protocol and JSON-RPC
 //! message exchange with the guest agent.
@@ -11,7 +11,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
 use tokio::time::timeout;
 
-/// Guest port that petty-agent listens on.
+/// Guest port that bouvet-agent listens on.
 const GUEST_PORT: u32 = 52;
 
 /// Total timeout for connecting to the agent (includes retry time).
@@ -23,7 +23,7 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(100);
 /// Timeout for individual RPC calls.
 const RPC_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Client for communicating with petty-agent inside a VM.
+/// Client for communicating with bouvet-agent inside a VM.
 ///
 /// This client connects to the guest agent via Firecracker's vsock Unix socket
 /// and exchanges JSON-RPC 2.0 messages.
@@ -42,7 +42,7 @@ impl AgentClient {
     ///
     /// # Arguments
     ///
-    /// * `vsock_path` - Path to the vsock Unix socket (e.g., `/tmp/petty/vm-1/v.sock`)
+    /// * `vsock_path` - Path to the vsock Unix socket (e.g., `/tmp/bouvet/vm-1/v.sock`)
     ///
     /// # Errors
     ///
@@ -256,7 +256,7 @@ pub struct FileEntry {
     pub size: u64,
 }
 
-// Internal response types to match petty-agent's JSON structure
+// Internal response types to match bouvet-agent's JSON structure
 
 #[derive(Debug, Deserialize)]
 struct PingResponse {

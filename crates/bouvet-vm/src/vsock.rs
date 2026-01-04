@@ -15,7 +15,7 @@ use std::path::Path;
 /// This sends a PUT request to `/vsock` on the Firecracker API socket.
 ///
 /// # Arguments
-/// * `socket_path` - Path to the Firecracker API socket (e.g., `/tmp/petty/vm-1/firecracker.socket`)
+/// * `socket_path` - Path to the Firecracker API socket (e.g., `/tmp/bouvet/vm-1/firecracker.socket`)
 /// * `config` - vsock configuration with guest CID and UDS path
 pub async fn configure_vsock(socket_path: &Path, config: &VsockConfig) -> Result<()> {
     tracing::debug!(
@@ -72,7 +72,7 @@ mod tests {
     fn test_vsock_config_default() {
         let config = VsockConfig::default();
         assert_eq!(config.guest_cid, 3);
-        assert_eq!(config.uds_path, PathBuf::from("/tmp/petty-vsock.sock"));
+        assert_eq!(config.uds_path, PathBuf::from("/tmp/bouvet-vsock.sock"));
     }
 
     #[test]

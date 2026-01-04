@@ -1,6 +1,6 @@
-# petty-vm
+# bouvet-vm
 
-MicroVM management for Petty agentic sandbox using Firecracker.
+MicroVM management for Bouvet agentic sandbox using Firecracker.
 
 ## Types
 
@@ -31,14 +31,14 @@ Linux + /dev/kvm + Firecracker binary + kernel + rootfs image
 
 ### 1. Add dependency
 
-In Cargo.toml: petty-vm = { path = "../crates/petty-vm" }
+In Cargo.toml: bouvet-vm = { path = "../crates/bouvet-vm" }
 
 ### 2. Create VM
 
 ```
 let vm = VmBuilder::new()
-    .kernel("/var/lib/petty/kernel/vmlinux")
-    .rootfs("/var/lib/petty/images/debian.ext4")
+    .kernel("/var/lib/bouvet/kernel/vmlinux")
+    .rootfs("/var/lib/bouvet/images/debian.ext4")
     .with_vsock(3)
     .build()
     .await?;

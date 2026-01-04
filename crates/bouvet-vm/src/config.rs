@@ -34,14 +34,14 @@ impl Default for MachineConfig {
         Self {
             vcpu_count: 2,
             memory_mib: 256,
-            kernel_path: PathBuf::from("/var/lib/petty/kernel/vmlinux"),
+            kernel_path: PathBuf::from("/var/lib/bouvet/kernel/vmlinux"),
             boot_args: "console=ttyS0 reboot=k panic=1 pci=off".into(),
             root_drive: DriveConfig::default(),
             extra_drives: Vec::new(),
             network: None,
             vsock: None,
             firecracker_path: PathBuf::from("/usr/local/bin/firecracker"),
-            chroot_path: PathBuf::from("/tmp/petty"),
+            chroot_path: PathBuf::from("/tmp/bouvet"),
         }
     }
 }
@@ -117,7 +117,7 @@ impl Default for DriveConfig {
     fn default() -> Self {
         Self {
             drive_id: "rootfs".into(),
-            path_on_host: PathBuf::from("/var/lib/petty/images/debian.ext4"),
+            path_on_host: PathBuf::from("/var/lib/bouvet/images/debian.ext4"),
             is_root_device: true,
             is_read_only: false,
         }
@@ -158,7 +158,7 @@ impl Default for VsockConfig {
     fn default() -> Self {
         Self {
             guest_cid: 3,
-            uds_path: PathBuf::from("/tmp/petty-vsock.sock"),
+            uds_path: PathBuf::from("/tmp/bouvet-vsock.sock"),
         }
     }
 }
@@ -244,8 +244,8 @@ mod tests {
 
     #[test]
     fn test_vsock_for_vm() {
-        let config = VsockConfig::for_vm(5, &PathBuf::from("/tmp/petty"), "vm-123");
+        let config = VsockConfig::for_vm(5, &PathBuf::from("/tmp/bouvet"), "vm-123");
         assert_eq!(config.guest_cid, 5);
-        assert_eq!(config.uds_path, PathBuf::from("/tmp/petty/vm-123/v.sock"));
+        assert_eq!(config.uds_path, PathBuf::from("/tmp/bouvet/vm-123/v.sock"));
     }
 }

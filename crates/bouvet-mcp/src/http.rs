@@ -2,7 +2,7 @@
 //!
 //! This module provides an HTTP server that exposes the MCP protocol via
 //! rmcp's StreamableHttpService, enabling remote AI agents to interact
-//! with Petty sandboxes.
+//! with Bouvet sandboxes.
 //!
 //! ## Endpoints
 //!
@@ -11,7 +11,7 @@
 //! - `GET /health` - Health check
 //! - `GET /` - Server info
 
-use crate::server::PettyServer;
+use crate::server::BouvetServer;
 use axum::{
     response::{Html, IntoResponse, Json},
     routing::get,
@@ -28,7 +28,7 @@ use tower_http::trace::TraceLayer;
 ///
 /// The returned router can be served directly with axum or composed
 /// into a larger application.
-pub fn build_router(server: PettyServer) -> Router {
+pub fn build_router(server: BouvetServer) -> Router {
     // Create session manager for handling MCP sessions
     let session_manager = Arc::new(LocalSessionManager::default());
 
@@ -61,7 +61,7 @@ pub fn build_router(server: PettyServer) -> Router {
 async fn health_handler() -> impl IntoResponse {
     Json(serde_json::json!({
         "status": "healthy",
-        "service": "petty-mcp"
+        "service": "bouvet-mcp"
     }))
 }
 
@@ -71,7 +71,7 @@ async fn root_handler() -> impl IntoResponse {
         r#"<!DOCTYPE html>
 <html>
 <head>
-    <title>Petty MCP Server</title>
+    <title>Bouvet MCP Server</title>
     <style>
         body { font-family: system-ui; max-width: 800px; margin: 50px auto; padding: 20px; }
         code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
@@ -79,7 +79,7 @@ async fn root_handler() -> impl IntoResponse {
     </style>
 </head>
 <body>
-    <h1>🔥 Petty MCP Server</h1>
+    <h1>🔥 Bouvet MCP Server</h1>
     <p>Model Context Protocol server for isolated code execution sandboxes.</p>
     
     <h2>Endpoints</h2>
@@ -115,7 +115,7 @@ async fn root_handler() -> impl IntoResponse {
 /// This function runs until the server is shut down via the provided
 /// shutdown signal.
 pub async fn serve(
-    server: PettyServer,
+    server: BouvetServer,
     addr: std::net::SocketAddr,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<(), std::io::Error> {
@@ -133,12 +133,12 @@ pub async fn serve(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PettyConfig;
+    use crate::BouvetConfig;
 
     #[test]
     fn test_build_router() {
-        let config = PettyConfig::default();
-        let server = PettyServer::new(config);
+        let config = BouvetConfig::default();
+        let server = BouvetServer::new(config);
         let _router = build_router(server);
         // Router builds without panic
     }

@@ -1,4 +1,4 @@
-# Phase 2: petty-agent
+# Phase 2: bouvet-agent
 
 > Guest agent binary running inside the microVM.
 
@@ -59,7 +59,7 @@ Lightweight Rust binary that:
 ## File Structure
 
 ```
-crates/petty-agent/
+crates/bouvet-agent/
 ├── Cargo.toml
 └── src/
     ├── main.rs       # Entry, vsock listener
@@ -197,7 +197,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 async fn main() -> Result<()> {
     // In real Firecracker: use vsock
     // For testing: use Unix socket
-    let listener = UnixListener::bind("/tmp/petty-agent.sock")?;
+    let listener = UnixListener::bind("/tmp/bouvet-agent.sock")?;
 
     loop {
         let (stream, _) = listener.accept().await?;
@@ -227,7 +227,7 @@ async fn handle_connection(stream: UnixStream) {
 
 ```toml
 [package]
-name = "petty-agent"
+name = "bouvet-agent"
 version = "0.1.0"
 edition = "2021"
 
@@ -245,13 +245,13 @@ tracing-subscriber = "0.3"
 
 ```bash
 # Build for Linux (from macOS)
-cargo build -p petty-agent --release --target x86_64-unknown-linux-musl
+cargo build -p bouvet-agent --release --target x86_64-unknown-linux-musl
 
 # Test locally with Unix socket
-cargo run -p petty-agent
+cargo run -p bouvet-agent
 
 # Test with netcat
-echo '{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}' | nc -U /tmp/petty-agent.sock
+echo '{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}' | nc -U /tmp/bouvet-agent.sock
 ```
 
 ---

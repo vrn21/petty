@@ -1,13 +1,13 @@
 # =============================================================================
 # security.tf - Security Group
 # =============================================================================
-# Security group for petty-mcp: SSH + MCP HTTP endpoint.
+# Security group for bouvet-mcp: SSH + MCP HTTP endpoint.
 # =============================================================================
 
-resource "aws_security_group" "petty_mcp" {
-  name        = "petty-mcp"
-  description = "Security group for petty-mcp server"
-  vpc_id      = aws_vpc.petty.id
+resource "aws_security_group" "bouvet_mcp" {
+  name        = "bouvet-mcp"
+  description = "Security group for bouvet-mcp server"
+  vpc_id      = aws_vpc.bouvet.id
 
   # SSH access
   ingress {
@@ -37,6 +37,6 @@ resource "aws_security_group" "petty_mcp" {
   }
 
   tags = {
-    Name = "petty-mcp-sg"
+    Name = "bouvet-mcp-sg"
   }
 }

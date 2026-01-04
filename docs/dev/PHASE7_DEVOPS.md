@@ -1,6 +1,6 @@
 # Phase 7: AWS Deployment (Simplified)
 
-> Deploying Petty on c5.metal Spot Instance with manual control.
+> Deploying Bouvet on c5.metal Spot Instance with manual control.
 
 ---
 
@@ -25,9 +25,9 @@
 │  ┌──────────────────────────────────────────────────────┐    │
 │  │                  c5.metal (Spot)                      │    │
 │  │  ┌─────────────────────────────────────────────────┐ │    │
-│  │  │                 Petty Stack                      │ │    │
+│  │  │                 Bouvet Stack                      │ │    │
 │  │  │  ┌───────────┐  ┌───────────┐  ┌─────────────┐  │ │    │
-│  │  │  │ petty-mcp │──│ petty-core│──│  Firecracker │  │ │    │
+│  │  │  │ bouvet-mcp │──│ bouvet-core│──│  Firecracker │  │ │    │
 │  │  │  └───────────┘  └───────────┘  └─────────────┘  │ │    │
 │  │  └─────────────────────────────────────────────────┘ │    │
 │  └──────────────────────────────────────────────────────┘    │
@@ -66,12 +66,12 @@
 
 1. Update packages
 2. Download Firecracker binary
-3. Download images from S3 to `/var/lib/petty/`
-4. Enable and start petty service
+3. Download images from S3 to `/var/lib/bouvet/`
+4. Enable and start bouvet service
 
 ### Task 5: Systemd Service
 
-- `/etc/systemd/system/petty.service`
+- `/etc/systemd/system/bouvet.service`
 - Auto-restart on failure
 
 ---
@@ -89,7 +89,7 @@ terraform/
 ├── iam.tf            # Roles
 └── scripts/
     ├── user-data.sh  # Bootstrap
-    └── petty.service # Systemd unit
+    └── bouvet.service # Systemd unit
 ```
 
 ---
@@ -122,7 +122,7 @@ terraform destroy
 | `ssh_key_name` | Yes      | -                     | EC2 key pair |
 | `region`       | No       | us-east-1             | AWS region   |
 | `spot_price`   | No       | 1.50                  | Max bid      |
-| `s3_bucket`    | No       | petty-images-{random} | Image bucket |
+| `s3_bucket`    | No       | bouvet-images-{random} | Image bucket |
 
 ---
 
@@ -130,6 +130,6 @@ terraform destroy
 
 - [ ] Terraform provisions c5.metal spot
 - [ ] Images download from S3 on boot
-- [ ] Petty service auto-starts
+- [ ] Bouvet service auto-starts
 - [ ] SSH access works
 - [ ] Manual stop/start works

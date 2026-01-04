@@ -1,16 +1,16 @@
 # =============================================================================
-# s3/main.tf - S3 Bucket for Petty Artifacts
+# s3/main.tf - S3 Bucket for Bouvet Artifacts
 # =============================================================================
 # OPTIONAL: Creates an S3 bucket with public read access for rootfs distribution.
 #
-# WARNING: DO NOT APPLY BY DEFAULT - The petty-artifacts bucket already exists.
+# WARNING: DO NOT APPLY BY DEFAULT - The bouvet-artifacts bucket already exists.
 #          Use this only if you need to create a new bucket.
 #
 # Usage:
 #   cd terraform/s3
 #   terraform init
-#   terraform plan -var="bucket_name=my-petty-artifacts"
-#   terraform apply -var="bucket_name=my-petty-artifacts"
+#   terraform plan -var="bucket_name=my-bouvet-artifacts"
+#   terraform apply -var="bucket_name=my-bouvet-artifacts"
 # =============================================================================
 
 terraform {
@@ -35,7 +35,7 @@ resource "aws_s3_bucket" "artifacts" {
   bucket = var.bucket_name
 
   tags = {
-    Project   = "petty"
+    Project   = "bouvet"
     ManagedBy = "terraform"
   }
 }

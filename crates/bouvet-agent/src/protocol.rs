@@ -1,4 +1,4 @@
-//! JSON-RPC 2.0 protocol types for petty-agent.
+//! JSON-RPC 2.0 protocol types for bouvet-agent.
 //!
 //! Implements the JSON-RPC 2.0 specification for guest-host communication.
 

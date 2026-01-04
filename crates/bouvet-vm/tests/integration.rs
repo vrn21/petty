@@ -1,13 +1,13 @@
-//! Integration tests for petty-vm.
+//! Integration tests for bouvet-vm.
 //!
 //! These tests require:
 //! - Linux with /dev/kvm access
 //! - Firecracker binary installed
 //! - Kernel and rootfs images
 //!
-//! Run with: `cargo test -p petty-vm -- --ignored`
+//! Run with: `cargo test -p bouvet-vm -- --ignored`
 
-use petty_vm::{VmBuilder, VmState};
+use bouvet_vm::{VmBuilder, VmState};
 use std::path::Path;
 
 /// Test full VM lifecycle: create -> running -> stop -> destroy
@@ -15,15 +15,15 @@ use std::path::Path;
 #[ignore = "requires Linux + KVM + Firecracker"]
 async fn test_vm_lifecycle() {
     // These paths should be set to actual kernel/rootfs for integration testing
-    let kernel_path = std::env::var("PETTY_KERNEL_PATH")
-        .unwrap_or_else(|_| "/var/lib/petty/kernel/vmlinux".to_string());
-    let rootfs_path = std::env::var("PETTY_ROOTFS_PATH")
-        .unwrap_or_else(|_| "/var/lib/petty/images/debian.ext4".to_string());
+    let kernel_path = std::env::var("BOUVET_KERNEL_PATH")
+        .unwrap_or_else(|_| "/var/lib/bouvet/kernel/vmlinux".to_string());
+    let rootfs_path = std::env::var("BOUVET_ROOTFS_PATH")
+        .unwrap_or_else(|_| "/var/lib/bouvet/images/debian.ext4".to_string());
 
     // Skip if files don't exist
     if !Path::new(&kernel_path).exists() || !Path::new(&rootfs_path).exists() {
         eprintln!("Skipping test: kernel or rootfs not found");
-        eprintln!("Set PETTY_KERNEL_PATH and PETTY_ROOTFS_PATH environment variables");
+        eprintln!("Set BOUVET_KERNEL_PATH and BOUVET_ROOTFS_PATH environment variables");
         return;
     }
 
@@ -49,10 +49,10 @@ async fn test_vm_lifecycle() {
 #[tokio::test]
 #[ignore = "requires Linux + KVM + Firecracker + TAP device"]
 async fn test_vm_with_network() {
-    let kernel_path = std::env::var("PETTY_KERNEL_PATH")
-        .unwrap_or_else(|_| "/var/lib/petty/kernel/vmlinux".to_string());
-    let rootfs_path = std::env::var("PETTY_ROOTFS_PATH")
-        .unwrap_or_else(|_| "/var/lib/petty/images/debian.ext4".to_string());
+    let kernel_path = std::env::var("BOUVET_KERNEL_PATH")
+        .unwrap_or_else(|_| "/var/lib/bouvet/kernel/vmlinux".to_string());
+    let rootfs_path = std::env::var("BOUVET_ROOTFS_PATH")
+        .unwrap_or_else(|_| "/var/lib/bouvet/images/debian.ext4".to_string());
 
     if !Path::new(&kernel_path).exists() || !Path::new(&rootfs_path).exists() {
         eprintln!("Skipping test: kernel or rootfs not found");
@@ -79,10 +79,10 @@ async fn test_vm_with_network() {
 #[tokio::test]
 #[ignore = "requires Linux + KVM + Firecracker"]
 async fn test_vm_stop_restart() {
-    let kernel_path = std::env::var("PETTY_KERNEL_PATH")
-        .unwrap_or_else(|_| "/var/lib/petty/kernel/vmlinux".to_string());
-    let rootfs_path = std::env::var("PETTY_ROOTFS_PATH")
-        .unwrap_or_else(|_| "/var/lib/petty/images/debian.ext4".to_string());
+    let kernel_path = std::env::var("BOUVET_KERNEL_PATH")
+        .unwrap_or_else(|_| "/var/lib/bouvet/kernel/vmlinux".to_string());
+    let rootfs_path = std::env::var("BOUVET_ROOTFS_PATH")
+        .unwrap_or_else(|_| "/var/lib/bouvet/images/debian.ext4".to_string());
 
     if !Path::new(&kernel_path).exists() || !Path::new(&rootfs_path).exists() {
         eprintln!("Skipping test: kernel or rootfs not found");

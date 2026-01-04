@@ -1,14 +1,14 @@
 [package]
-name = "petty-core"
+name = "bouvet-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "Sandbox orchestration layer for Petty agentic sandboxes"
+description = "Sandbox orchestration layer for Bouvet agentic sandboxes"
 
 [dependencies]
-petty-vm = { path = "../petty-vm" }
+bouvet-vm = { path = "../bouvet-vm" }
 
 # Async runtime
 tokio = { workspace = true }

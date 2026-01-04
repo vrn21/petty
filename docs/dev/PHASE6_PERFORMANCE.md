@@ -27,7 +27,7 @@ When a client (e.g., the MCP server) requests a new sandbox:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│                       petty-core / pool                     │
+│                       bouvet-core / pool                     │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌─────────────────┐       ┌──────────────────────────┐     │
@@ -64,7 +64,7 @@ A high-level orchestrator that manages multiple pools (one per rootfs type).
 
 ### 2. Sandbox Lifecycle Integration
 
-The `PoolManager` becomes the primary entry point for `petty-mcp`, replacing direct `SandboxManager` calls for common language types.
+The `PoolManager` becomes the primary entry point for `bouvet-mcp`, replacing direct `SandboxManager` calls for common language types.
 
 ---
 
@@ -87,9 +87,9 @@ The `PoolManager` becomes the primary entry point for `petty-mcp`, replacing dir
 - Uses `SandboxManager` to create new VMs.
 - Must handle host resource exhaustion (concurrency limits for booting).
 
-### Task 4: Integration with petty-mcp
+### Task 4: Integration with bouvet-mcp
 
-- Update `PettyServer` to use `PoolManager`.
+- Update `BouvetServer` to use `PoolManager`.
 - Measure the difference in `create_sandbox` response time.
 
 ---

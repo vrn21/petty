@@ -1,4 +1,4 @@
-# Petty - Makefile for building rootfs images
+# Bouvet - Makefile for building rootfs images
 # Works on macOS and Linux - all Linux operations run inside Docker
 
 .PHONY: all rootfs agent docker-image clean help check-docker rebuild
@@ -27,10 +27,10 @@ endif
 IMAGE_SIZE ?= 2500M
 IMAGE_NAME ?= petty-devbox
 OUTPUT_DIR := images/output
-AGENT_BINARY := $(OUTPUT_DIR)/petty-agent
+AGENT_BINARY := $(OUTPUT_DIR)/bouvet-agent
 
 # Find all agent source files for dependency tracking
-AGENT_SOURCES := $(shell find crates/petty-agent/src -name '*.rs' 2>/dev/null)
+AGENT_SOURCES := $(shell find crates/bouvet-agent/src -name '*.rs' 2>/dev/null)
 
 # ============================================================================
 # TARGETS
@@ -41,11 +41,11 @@ all: rootfs
 
 # Help
 help:
-	@echo "Petty Rootfs Build System"
+	@echo "Bouvet Rootfs Build System"
 	@echo ""
 	@echo "Targets:"
 	@echo "  make rootfs       - Build complete ext4 rootfs image (default)"
-	@echo "  make agent        - Cross-compile petty-agent for Linux (via Docker)"
+	@echo "  make agent        - Cross-compile bouvet-agent for Linux (via Docker)"
 	@echo "  make docker-image - Build Docker image only (no ext4)"
 	@echo "  make clean        - Remove generated files"
 	@echo "  make rebuild      - Force clean rebuild"
@@ -70,12 +70,12 @@ rootfs: $(OUTPUT_DIR)/debian-devbox.ext4
 	@echo "✓ Rootfs image ready: $(OUTPUT_DIR)/debian-devbox.ext4 ($(ARCH))"
 	@ls -lh $(OUTPUT_DIR)/debian-devbox.ext4
 
-# Cross-compile petty-agent for Linux inside Docker (works on macOS!)
+# Cross-compile bouvet-agent for Linux inside Docker (works on macOS!)
 agent: $(AGENT_BINARY)
 
 # Always rebuild if sources change. Use .PHONY if Cargo.lock is missing.
-$(AGENT_BINARY): $(AGENT_SOURCES) crates/petty-agent/Cargo.toml Cargo.toml
-	@echo "==> Building petty-agent for $(RUST_TARGET) (via Docker)..."
+$(AGENT_BINARY): $(AGENT_SOURCES) crates/bouvet-agent/Cargo.toml Cargo.toml
+	@echo "==> Building bouvet-agent for $(RUST_TARGET) (via Docker)..."
 	@mkdir -p $(OUTPUT_DIR)
 	DOCKER_BUILDKIT=1 docker build \
 		--platform $(DOCKER_PLATFORM) \
@@ -90,12 +90,12 @@ $(AGENT_BINARY): $(AGENT_SOURCES) crates/petty-agent/Cargo.toml Cargo.toml
 docker-image: check-docker $(AGENT_BINARY)
 	@echo "==> Building Docker image $(IMAGE_NAME) ($(DOCKER_PLATFORM))..."
 	@mkdir -p images/output
-	@cp $(AGENT_BINARY) images/petty-agent
+	@cp $(AGENT_BINARY) images/bouvet-agent
 	DOCKER_BUILDKIT=1 docker build \
 		--platform $(DOCKER_PLATFORM) \
 		-t $(IMAGE_NAME) \
 		-f images/Dockerfile.devbox images/
-	@rm -f images/petty-agent
+	@rm -f images/bouvet-agent
 	@echo "✓ Docker image built: $(IMAGE_NAME)"
 
 # Export Docker image to tarball
@@ -131,7 +131,7 @@ $(OUTPUT_DIR)/debian-devbox.ext4: $(OUTPUT_DIR)/rootfs.tar
 clean:
 	@echo "==> Cleaning..."
 	rm -rf $(OUTPUT_DIR)/*
-	rm -f images/petty-agent images/rootfs.tar
+	rm -f images/bouvet-agent images/rootfs.tar
 	docker rmi $(IMAGE_NAME) 2>/dev/null || true
 	@echo "✓ Clean complete"
 

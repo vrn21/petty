@@ -1,7 +1,7 @@
 # =============================================================================
 # main.tf - Terraform Provider Configuration
 # =============================================================================
-# Provider configuration for deploying petty-mcp on AWS EC2.
+# Provider configuration for deploying bouvet-mcp on AWS EC2.
 # =============================================================================
 
 terraform {
@@ -20,7 +20,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "petty"
+      Project     = "bouvet"
       Environment = var.environment
       ManagedBy   = "terraform"
     }

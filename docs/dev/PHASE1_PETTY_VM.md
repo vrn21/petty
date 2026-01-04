@@ -1,4 +1,4 @@
-# Phase 1: petty-vm Module Design
+# Phase 1: bouvet-vm Module Design
 
 > Implementation guide for the MicroVM management layer using firepilot.
 
@@ -6,7 +6,7 @@
 
 ## Objective
 
-Implement a complete and functional `petty-vm` crate that wraps firepilot to provide:
+Implement a complete and functional `bouvet-vm` crate that wraps firepilot to provide:
 
 - MicroVM lifecycle management (create, start, stop, destroy)
 - Drive and network configuration
@@ -19,7 +19,7 @@ Implement a complete and functional `petty-vm` crate that wraps firepilot to pro
 The crate structure exists with stub implementations:
 
 ```
-crates/petty-vm/
+crates/bouvet-vm/
 ├── Cargo.toml
 └── src/
     ├── lib.rs      # Module exports
@@ -34,7 +34,7 @@ crates/petty-vm/
 
 ### Task 1: Implement VirtualMachine::create()
 
-**File**: [machine.rs](file:///Users/vrn21/Developer/rust/petty/crates/petty-vm/src/machine.rs)
+**File**: [machine.rs](file:///Users/vrn21/Developer/rust/bouvet/crates/bouvet-vm/src/machine.rs)
 
 Replace the stub `create()` method with actual firepilot integration:
 
@@ -113,7 +113,7 @@ pub async fn destroy(self) -> Result<()> {
 
 ### Task 3: Add Network Configuration
 
-**File**: [machine.rs](file:///Users/vrn21/Developer/rust/petty/crates/petty-vm/src/machine.rs)
+**File**: [machine.rs](file:///Users/vrn21/Developer/rust/bouvet/crates/bouvet-vm/src/machine.rs)
 
 Add network interface when `config.network` is Some:
 
@@ -152,7 +152,7 @@ impl Default for VsockConfig {
     fn default() -> Self {
         Self {
             guest_cid: 3,
-            uds_path: PathBuf::from("/tmp/petty-vsock.sock"),
+            uds_path: PathBuf::from("/tmp/bouvet-vsock.sock"),
         }
     }
 }

@@ -33,7 +33,7 @@ else
 fi
 
 echo "============================================"
-echo "  Downloading Petty Dependencies"
+echo "  Downloading Bouvet Dependencies"
 echo "============================================"
 echo ""
 echo "  Architecture: $ARCH"

@@ -1,14 +1,14 @@
 [package]
-name = "petty-agent"
+name = "bouvet-agent"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "Guest agent for petty microVMs - handles JSON-RPC commands via vsock"
+description = "Guest agent for bouvet microVMs - handles JSON-RPC commands via vsock"
 
 [[bin]]
-name = "petty-agent"
+name = "bouvet-agent"
 path = "src/main.rs"
 
 [dependencies]

@@ -1,13 +1,13 @@
 # Terraform Infrastructure Requirements
 
-> Design document for deploying petty-mcp on AWS EC2.
+> Design document for deploying bouvet-mcp on AWS EC2.
 > **Target**: Another agent will implement this specification.
 
 ---
 
 ## Overview
 
-Deploy the `petty-mcp` Docker container on an AWS c5.metal on-demand instance with:
+Deploy the `bouvet-mcp` Docker container on an AWS c5.metal on-demand instance with:
 
 - Debian 12 (Bookworm) base AMI
 - VPC with public subnet
@@ -38,8 +38,8 @@ Deploy the `petty-mcp` Docker container on an AWS c5.metal on-demand instance wi
 │  │  │  │   Specs: 96 vCPUs, 192GB RAM, /dev/kvm             │  │ │ │
 │  │  │  │                                                    │  │ │ │
 │  │  │  │   ┌────────────────────────────────────────────┐   │  │ │ │
-│  │  │  │   │  Docker Container: petty-mcp               │   │  │ │ │
-│  │  │  │   │  ├── petty-mcp server                      │   │  │ │ │
+│  │  │  │   │  Docker Container: bouvet-mcp               │   │  │ │ │
+│  │  │  │   │  ├── bouvet-mcp server                      │   │  │ │ │
 │  │  │  │   │  ├── Firecracker v1.5.0                    │   │  │ │ │
 │  │  │  │   │  ├── vmlinux kernel                        │   │  │ │ │
 │  │  │  │   │  └── rootfs (downloaded at startup)        │   │  │ │ │
@@ -84,13 +84,13 @@ terraform/
     └── outputs.tf       # Bucket URL output
 ```
 
-> **Note**: The `s3/` directory is a separate Terraform module. It should NOT be applied by default since the `petty-artifacts` bucket already exists.
+> **Note**: The `s3/` directory is a separate Terraform module. It should NOT be applied by default since the `bouvet-artifacts` bucket already exists.
 
 ---
 
 ## Optional: S3 Bucket Module
 
-> ⚠️ **DO NOT APPLY BY DEFAULT** - Bucket `petty-artifacts` already exists.
+> ⚠️ **DO NOT APPLY BY DEFAULT** - Bucket `bouvet-artifacts` already exists.
 
 This module is provided for reference or for new deployments.
 
@@ -124,7 +124,7 @@ resource "aws_s3_bucket" "artifacts" {
   bucket = var.bucket_name
 
   tags = {
-    Project   = "petty"
+    Project   = "bouvet"
     ManagedBy = "terraform"
   }
 }
@@ -169,9 +169,9 @@ variable "aws_region" {
 }
 
 variable "bucket_name" {
-  description = "S3 bucket name for petty artifacts"
+  description = "S3 bucket name for bouvet artifacts"
   type        = string
-  default     = "petty-artifacts"
+  default     = "bouvet-artifacts"
 }
 ```
 
@@ -207,11 +207,11 @@ cd terraform/s3
 
 # Initialize and apply ONLY if bucket doesn't exist
 terraform init
-terraform plan -var="bucket_name=petty-artifacts"
+terraform plan -var="bucket_name=bouvet-artifacts"
 terraform apply -var="bucket_name=my-new-bucket"  # Use different name if needed
 
 # Upload rootfs after bucket is created
-aws s3 cp debian-devbox.ext4 s3://petty-artifacts/
+aws s3 cp debian-devbox.ext4 s3://bouvet-artifacts/
 ```
 
 ---
@@ -236,7 +236,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "petty"
+      Project     = "bouvet"
       Environment = var.environment
       ManagedBy   = "terraform"
     }
@@ -255,8 +255,8 @@ provider "aws" {
 | `environment`       | string       | `"production"`                                                            | No       | Environment tag     |
 | `ssh_key_name`      | string       | -                                                                         | **Yes**  | EC2 key pair name   |
 | `instance_type`     | string       | `"c5.metal"`                                                              | No       | Must support KVM    |
-| `docker_image`      | string       | `"ghcr.io/vrn21/petty-mcp:latest"`                                        | No       | Container image     |
-| `rootfs_url`        | string       | `"https://petty-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4"` | No       | Rootfs download URL |
+| `docker_image`      | string       | `"ghcr.io/vrn21/bouvet-mcp:latest"`                                        | No       | Container image     |
+| `rootfs_url`        | string       | `"https://bouvet-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4"` | No       | Rootfs download URL |
 | `allowed_ssh_cidrs` | list(string) | `["0.0.0.0/0"]`                                                           | No       | SSH allowed CIDRs   |
 | `volume_size`       | number       | `50`                                                                      | No       | Root volume GB      |
 
@@ -301,9 +301,9 @@ Create these resources:
 
 | Resource                      | Name     | Configuration                                |
 | ----------------------------- | -------- | -------------------------------------------- |
-| `aws_vpc`                     | `petty`  | CIDR: `10.0.0.0/16`, DNS hostnames enabled   |
+| `aws_vpc`                     | `bouvet`  | CIDR: `10.0.0.0/16`, DNS hostnames enabled   |
 | `aws_subnet`                  | `public` | CIDR: `10.0.1.0/24`, map public IP on launch |
-| `aws_internet_gateway`        | `petty`  | Attached to VPC                              |
+| `aws_internet_gateway`        | `bouvet`  | Attached to VPC                              |
 | `aws_route_table`             | `public` | Route `0.0.0.0/0` → IGW                      |
 | `aws_route_table_association` | -        | Associate subnet with route table            |
 
@@ -311,7 +311,7 @@ Create these resources:
 
 ### 5. security.tf
 
-Security group `petty-mcp`:
+Security group `bouvet-mcp`:
 
 | Direction | Port | Protocol | Source                  | Description       |
 | --------- | ---- | -------- | ----------------------- | ----------------- |
@@ -346,10 +346,10 @@ Bootstrap script requirements:
 #!/bin/bash
 set -euo pipefail
 
-LOG_FILE="/var/log/petty-bootstrap.log"
+LOG_FILE="/var/log/bouvet-bootstrap.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "=== Petty Bootstrap Started: $(date) ==="
+echo "=== Bouvet Bootstrap Started: $(date) ==="
 
 # 1. Update system
 apt-get update
@@ -367,9 +367,9 @@ if [ -e /dev/kvm ]; then
 fi
 
 # 4. Create systemd service
-cat > /etc/systemd/system/petty-mcp.service << 'EOF'
+cat > /etc/systemd/system/bouvet-mcp.service << 'EOF'
 [Unit]
-Description=Petty MCP Server
+Description=Bouvet MCP Server
 After=network.target docker.service
 Requires=docker.service
 
@@ -380,18 +380,18 @@ RestartSec=10
 TimeoutStartSec=300
 
 ExecStartPre=/usr/bin/docker pull ${docker_image}
-ExecStart=/usr/bin/docker run --rm --name petty-mcp \
+ExecStart=/usr/bin/docker run --rm --name bouvet-mcp \
     --privileged \
     --device=/dev/kvm \
     -p 8080:8080 \
-    -e PETTY_ROOTFS_URL=${rootfs_url} \
-    -e PETTY_TRANSPORT=both \
-    -e PETTY_HTTP_HOST=0.0.0.0 \
-    -e PETTY_HTTP_PORT=8080 \
+    -e BOUVET_ROOTFS_URL=${rootfs_url} \
+    -e BOUVET_TRANSPORT=both \
+    -e BOUVET_HTTP_HOST=0.0.0.0 \
+    -e BOUVET_HTTP_PORT=8080 \
     -e RUST_LOG=info \
     ${docker_image}
 
-ExecStop=/usr/bin/docker stop petty-mcp
+ExecStop=/usr/bin/docker stop bouvet-mcp
 
 [Install]
 WantedBy=multi-user.target
@@ -399,10 +399,10 @@ EOF
 
 # 5. Start service
 systemctl daemon-reload
-systemctl enable petty-mcp
-systemctl start petty-mcp
+systemctl enable bouvet-mcp
+systemctl start bouvet-mcp
 
-echo "=== Petty Bootstrap Complete: $(date) ==="
+echo "=== Bouvet Bootstrap Complete: $(date) ==="
 ```
 
 **Note**: Use `templatefile()` to substitute `${docker_image}` and `${rootfs_url}`.
@@ -413,9 +413,9 @@ echo "=== Petty Bootstrap Complete: $(date) ==="
 
 | Output         | Value                                                        | Description                            |
 | -------------- | ------------------------------------------------------------ | -------------------------------------- |
-| `instance_id`  | `aws_instance.petty.id`                                      | EC2 instance ID                        |
-| `public_ip`    | `aws_eip.petty.public_ip`                                    | Elastic IP address                     |
-| `private_ip`   | `aws_instance.petty.private_ip`                              | Private IP                             |
+| `instance_id`  | `aws_instance.bouvet.id`                                      | EC2 instance ID                        |
+| `public_ip`    | `aws_eip.bouvet.public_ip`                                    | Elastic IP address                     |
+| `private_ip`   | `aws_instance.bouvet.private_ip`                              | Private IP                             |
 | `ssh_command`  | `"ssh -i ~/.ssh/${var.ssh_key_name}.pem admin@${public_ip}"` | SSH command (Debian uses `admin` user) |
 | `mcp_endpoint` | `"http://${public_ip}:8080/mcp"`                             | MCP endpoint URL                       |
 | `health_url`   | `"http://${public_ip}:8080/health"`                          | Health check URL                       |
@@ -464,7 +464,7 @@ curl -f http://$(terraform output -raw public_ip):8080/health
 
 # 3. SSH and check logs
 ssh -i ~/.ssh/KEY.pem admin@$(terraform output -raw public_ip)
-sudo journalctl -u petty-mcp -f
+sudo journalctl -u bouvet-mcp -f
 
 # 4. Test MCP
 curl -X POST http://$(terraform output -raw public_ip):8080/mcp \

@@ -1,5 +1,5 @@
 [package]
-name = "petty-vm"
+name = "bouvet-vm"
 description = "MicroVM management layer using firepilot for Firecracker"
 version.workspace = true
 edition.workspace = true

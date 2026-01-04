@@ -44,9 +44,9 @@ impl TransportMode {
     }
 }
 
-/// Configuration for the Petty MCP server.
+/// Configuration for the Bouvet MCP server.
 #[derive(Debug, Clone)]
-pub struct PettyConfig {
+pub struct BouvetConfig {
     /// Path to the kernel image.
     pub kernel_path: PathBuf,
 
@@ -91,13 +91,13 @@ pub enum ConfigError {
     InvalidChroot(PathBuf),
 }
 
-impl Default for PettyConfig {
+impl Default for BouvetConfig {
     fn default() -> Self {
         Self {
-            kernel_path: PathBuf::from("/var/lib/petty/vmlinux"),
-            rootfs_path: PathBuf::from("/var/lib/petty/debian-devbox.ext4"),
+            kernel_path: PathBuf::from("/var/lib/bouvet/vmlinux"),
+            rootfs_path: PathBuf::from("/var/lib/bouvet/debian-devbox.ext4"),
             firecracker_path: PathBuf::from("/usr/local/bin/firecracker"),
-            chroot_path: PathBuf::from("/tmp/petty"),
+            chroot_path: PathBuf::from("/tmp/bouvet"),
             pool_enabled: true,
             pool_min_size: 3,
             pool_max_boots: 2,
@@ -107,59 +107,59 @@ impl Default for PettyConfig {
     }
 }
 
-impl PettyConfig {
+impl BouvetConfig {
     /// Load configuration from environment variables.
     ///
     /// | Variable | Default |
     /// |----------|---------|
-    /// | `PETTY_KERNEL` | `/var/lib/petty/vmlinux` |
-    /// | `PETTY_ROOTFS` | `/var/lib/petty/debian-devbox.ext4` |
-    /// | `PETTY_FIRECRACKER` | `/usr/local/bin/firecracker` |
-    /// | `PETTY_CHROOT` | `/tmp/petty` |
-    /// | `PETTY_POOL_ENABLED` | `true` |
-    /// | `PETTY_POOL_MIN_SIZE` | `3` |
-    /// | `PETTY_POOL_MAX_BOOTS` | `2` |
-    /// | `PETTY_TRANSPORT` | `both` (stdio, http, both) |
-    /// | `PETTY_HTTP_HOST` | `0.0.0.0` |
-    /// | `PETTY_HTTP_PORT` | `8080` |
+    /// | `BOUVET_KERNEL` | `/var/lib/bouvet/vmlinux` |
+    /// | `BOUVET_ROOTFS` | `/var/lib/bouvet/debian-devbox.ext4` |
+    /// | `BOUVET_FIRECRACKER` | `/usr/local/bin/firecracker` |
+    /// | `BOUVET_CHROOT` | `/tmp/bouvet` |
+    /// | `BOUVET_POOL_ENABLED` | `true` |
+    /// | `BOUVET_POOL_MIN_SIZE` | `3` |
+    /// | `BOUVET_POOL_MAX_BOOTS` | `2` |
+    /// | `BOUVET_TRANSPORT` | `both` (stdio, http, both) |
+    /// | `BOUVET_HTTP_HOST` | `0.0.0.0` |
+    /// | `BOUVET_HTTP_PORT` | `8080` |
     pub fn from_env() -> Self {
         let default = Self::default();
 
-        let http_host: IpAddr = std::env::var("PETTY_HTTP_HOST")
+        let http_host: IpAddr = std::env::var("BOUVET_HTTP_HOST")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
 
-        let http_port: u16 = std::env::var("PETTY_HTTP_PORT")
+        let http_port: u16 = std::env::var("BOUVET_HTTP_PORT")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(8080);
 
         Self {
-            kernel_path: std::env::var("PETTY_KERNEL")
+            kernel_path: std::env::var("BOUVET_KERNEL")
                 .map(PathBuf::from)
                 .unwrap_or(default.kernel_path),
-            rootfs_path: std::env::var("PETTY_ROOTFS")
+            rootfs_path: std::env::var("BOUVET_ROOTFS")
                 .map(PathBuf::from)
                 .unwrap_or(default.rootfs_path),
-            firecracker_path: std::env::var("PETTY_FIRECRACKER")
+            firecracker_path: std::env::var("BOUVET_FIRECRACKER")
                 .map(PathBuf::from)
                 .unwrap_or(default.firecracker_path),
-            chroot_path: std::env::var("PETTY_CHROOT")
+            chroot_path: std::env::var("BOUVET_CHROOT")
                 .map(PathBuf::from)
                 .unwrap_or(default.chroot_path),
-            pool_enabled: std::env::var("PETTY_POOL_ENABLED")
+            pool_enabled: std::env::var("BOUVET_POOL_ENABLED")
                 .map(|v| v != "false" && v != "0")
                 .unwrap_or(default.pool_enabled),
-            pool_min_size: std::env::var("PETTY_POOL_MIN_SIZE")
+            pool_min_size: std::env::var("BOUVET_POOL_MIN_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(default.pool_min_size),
-            pool_max_boots: std::env::var("PETTY_POOL_MAX_BOOTS")
+            pool_max_boots: std::env::var("BOUVET_POOL_MAX_BOOTS")
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(default.pool_max_boots),
-            transport_mode: std::env::var("PETTY_TRANSPORT")
+            transport_mode: std::env::var("BOUVET_TRANSPORT")
                 .map(|v| TransportMode::parse(&v))
                 .unwrap_or(default.transport_mode),
             http_addr: SocketAddr::new(http_host, http_port),
@@ -218,17 +218,17 @@ mod tests {
 
     #[test]
     fn test_default_config() {
-        let config = PettyConfig::default();
-        assert_eq!(config.kernel_path, PathBuf::from("/var/lib/petty/vmlinux"));
+        let config = BouvetConfig::default();
+        assert_eq!(config.kernel_path, PathBuf::from("/var/lib/bouvet/vmlinux"));
         assert_eq!(
             config.rootfs_path,
-            PathBuf::from("/var/lib/petty/debian.ext4")
+            PathBuf::from("/var/lib/bouvet/debian-devbox.ext4")
         );
         assert_eq!(
             config.firecracker_path,
-            PathBuf::from("/usr/bin/firecracker")
+            PathBuf::from("/usr/local/bin/firecracker")
         );
-        assert_eq!(config.chroot_path, PathBuf::from("/tmp/petty"));
+        assert_eq!(config.chroot_path, PathBuf::from("/tmp/bouvet"));
         assert_eq!(config.transport_mode, TransportMode::Both);
         assert_eq!(config.http_addr.port(), 8080);
     }
@@ -258,16 +258,16 @@ mod tests {
     #[test]
     fn test_from_env_uses_defaults() {
         // Clear any existing env vars
-        std::env::remove_var("PETTY_KERNEL");
-        std::env::remove_var("PETTY_ROOTFS");
-        std::env::remove_var("PETTY_FIRECRACKER");
-        std::env::remove_var("PETTY_CHROOT");
-        std::env::remove_var("PETTY_TRANSPORT");
-        std::env::remove_var("PETTY_HTTP_HOST");
-        std::env::remove_var("PETTY_HTTP_PORT");
+        std::env::remove_var("BOUVET_KERNEL");
+        std::env::remove_var("BOUVET_ROOTFS");
+        std::env::remove_var("BOUVET_FIRECRACKER");
+        std::env::remove_var("BOUVET_CHROOT");
+        std::env::remove_var("BOUVET_TRANSPORT");
+        std::env::remove_var("BOUVET_HTTP_HOST");
+        std::env::remove_var("BOUVET_HTTP_PORT");
 
-        let config = PettyConfig::from_env();
-        let default = PettyConfig::default();
+        let config = BouvetConfig::from_env();
+        let default = BouvetConfig::default();
 
         assert_eq!(config.kernel_path, default.kernel_path);
         assert_eq!(config.rootfs_path, default.rootfs_path);

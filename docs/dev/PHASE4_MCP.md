@@ -1,6 +1,6 @@
-# Phase 4: petty-mcp
+# Phase 4: bouvet-mcp
 
-> MCP Server exposing Petty sandboxes to AI agents.
+> MCP Server exposing Bouvet sandboxes to AI agents.
 
 ---
 
@@ -11,7 +11,7 @@ MCP (Model Context Protocol) server that:
 1. Exposes sandbox management as MCP tools
 2. Allows AI agents to create/execute/destroy sandboxes
 3. Runs via stdio transport (standard for Claude, Cursor, etc.)
-4. Integrates with `petty-core` for all sandbox operations
+4. Integrates with `bouvet-core` for all sandbox operations
 
 ---
 
@@ -43,12 +43,12 @@ MCP is Anthropic's open standard for connecting AI models to external tools and 
                               │ stdio (JSON-RPC)
                               ▼
 ┌────────────────────────────────────────────────────────────┐
-│                      petty-mcp                             │
+│                      bouvet-mcp                             │
 ├────────────────────────────────────────────────────────────┤
 │                                                            │
 │  ┌──────────────────┐     ┌────────────────────────────┐  │
-│  │   PettyServer    │────▶│      SandboxManager        │  │
-│  │  (ServerHandler) │     │      (from petty-core)     │  │
+│  │   BouvetServer    │────▶│      SandboxManager        │  │
+│  │  (ServerHandler) │     │      (from bouvet-core)     │  │
 │  └──────────────────┘     └────────────────────────────┘  │
 │           │                                                │
 │  ┌────────┴────────────────────────────────────────────┐  │
@@ -68,12 +68,12 @@ MCP is Anthropic's open standard for connecting AI models to external tools and 
 ## File Structure
 
 ```
-crates/petty-mcp/
+crates/bouvet-mcp/
 ├── Cargo.toml
 └── src/
     ├── lib.rs        # Re-exports
     ├── main.rs       # Entry point (stdio server)
-    ├── server.rs     # PettyServer with tool implementations
+    ├── server.rs     # BouvetServer with tool implementations
     └── tools.rs      # Tool parameter/result types (optional)
 ```
 
@@ -111,7 +111,7 @@ crates/petty-mcp/
 ### Task 1: Create Crate Structure
 
 - Set up Cargo.toml with dependencies
-- Add petty-core as dependency
+- Add bouvet-core as dependency
 - Add rmcp with required features
 - Create module files
 
@@ -121,9 +121,9 @@ crates/petty-mcp/
 - Define request/response structs for each tool
 - Example: `CreateSandboxParams`, `ExecuteCodeParams`, etc.
 
-### Task 3: Implement PettyServer Struct
+### Task 3: Implement BouvetServer Struct
 
-- Wrap `SandboxManager` from petty-core
+- Wrap `SandboxManager` from bouvet-core
 - Store configuration (kernel path, rootfs path, etc.)
 - Implement initialization logic
 
@@ -144,7 +144,7 @@ crates/petty-mcp/
 
 - Set up tracing/logging
 - Initialize SandboxManager
-- Create PettyServer
+- Create BouvetServer
 - Start stdio transport with `.serve()`
 
 ### Task 7: Add Configuration
@@ -162,17 +162,17 @@ crates/petty-mcp/
 
 ```toml
 [package]
-name = "petty-mcp"
+name = "bouvet-mcp"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "petty-mcp"
+name = "bouvet-mcp"
 path = "src/main.rs"
 
 [dependencies]
 # Internal
-petty-core = { path = "../petty-core" }
+bouvet-core = { path = "../bouvet-core" }
 
 # MCP SDK (latest)
 rmcp = { version = "0.12", features = ["server", "transport-io"] }
@@ -201,7 +201,7 @@ clap = { version = "4", features = ["derive"], optional = true }
 
 ```
 #[tool_router]
-impl PettyServer {
+impl BouvetServer {
     #[tool(description = "Create a new isolated sandbox")]
     async fn create_sandbox(&self, params: Parameters<CreateSandboxParams>)
         -> Result<CallToolResult, McpError>
@@ -215,7 +215,7 @@ impl PettyServer {
 ### ServerHandler Implementation
 
 ```
-impl ServerHandler for PettyServer {
+impl ServerHandler for BouvetServer {
     fn get_info(&self) -> ServerInfo { ... }
 
     async fn list_tools(&self, ...) -> Result<ListToolsResult, McpError> {
@@ -233,7 +233,7 @@ impl ServerHandler for PettyServer {
 ```
 #[tokio::main]
 async fn main() {
-    let server = PettyServer::new(config).await;
+    let server = BouvetServer::new(config).await;
     server.serve(rmcp::transport::stdio()).await.unwrap();
 }
 ```
@@ -262,10 +262,10 @@ async fn main() {
 
 | Option      | Env Var             | Default                      | Description          |
 | ----------- | ------------------- | ---------------------------- | -------------------- |
-| Kernel path | `PETTY_KERNEL`      | `/var/lib/petty/vmlinux`     | Path to kernel image |
-| Rootfs path | `PETTY_ROOTFS`      | `/var/lib/petty/debian.ext4` | Path to rootfs image |
-| Firecracker | `PETTY_FIRECRACKER` | `/usr/bin/firecracker`       | Firecracker binary   |
-| Chroot      | `PETTY_CHROOT`      | `/tmp/petty`                 | Working directory    |
+| Kernel path | `BOUVET_KERNEL`      | `/var/lib/bouvet/vmlinux`     | Path to kernel image |
+| Rootfs path | `BOUVET_ROOTFS`      | `/var/lib/bouvet/debian.ext4` | Path to rootfs image |
+| Firecracker | `BOUVET_FIRECRACKER` | `/usr/bin/firecracker`       | Firecracker binary   |
+| Chroot      | `BOUVET_CHROOT`      | `/tmp/bouvet`                 | Working directory    |
 
 ---
 
@@ -287,10 +287,10 @@ async fn main() {
 
 ```bash
 # Run server
-cargo run -p petty-mcp
+cargo run -p bouvet-mcp
 
 # Test with MCP client (e.g., mcp-client-cli)
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | cargo run -p petty-mcp
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | cargo run -p bouvet-mcp
 ```
 
 ---

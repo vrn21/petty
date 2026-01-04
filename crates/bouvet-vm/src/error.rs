@@ -1,8 +1,8 @@
-//! Error types for petty-vm.
+//! Error types for bouvet-vm.
 
 use thiserror::Error;
 
-/// Result type alias for petty-vm operations.
+/// Result type alias for bouvet-vm operations.
 pub type Result<T> = std::result::Result<T, VmError>;
 
 /// Errors that can occur during VM operations.

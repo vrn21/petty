@@ -1,4 +1,4 @@
-//! File system operations for petty-agent.
+//! File system operations for bouvet-agent.
 //!
 //! Provides functions to read, write, and list files/directories.
 
@@ -108,7 +108,7 @@ mod tests {
     fn temp_dir() -> PathBuf {
         let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
         let dir =
-            std::env::temp_dir().join(format!("petty-agent-test-{}-{}", std::process::id(), id));
+            std::env::temp_dir().join(format!("bouvet-agent-test-{}-{}", std::process::id(), id));
         // Clean up any existing directory first
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
@@ -121,7 +121,7 @@ mod tests {
         let path = dir.join("test.txt");
         let path_str = path.to_str().unwrap();
 
-        let content = "Hello, petty-agent!";
+        let content = "Hello, bouvet-agent!";
         assert!(write_file(path_str, content).is_ok());
         assert_eq!(read_file(path_str).unwrap(), content);
 

@@ -9,7 +9,7 @@ variable "aws_region" {
 }
 
 variable "bucket_name" {
-  description = "S3 bucket name for petty artifacts"
+  description = "S3 bucket name for bouvet artifacts"
   type        = string
-  default     = "petty-artifacts"
+  default     = "bouvet-artifacts"
 }

@@ -30,3 +30,11 @@ config.toml
 # already existing elements were commented out
 
 #/target
+
+
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+terraform.tfvars.json
+.terraform.lock.hcl

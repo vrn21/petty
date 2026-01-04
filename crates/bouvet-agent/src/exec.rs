@@ -1,4 +1,4 @@
-//! Command and code execution for petty-agent.
+//! Command and code execution for bouvet-agent.
 //!
 //! Provides functions to execute shell commands and code in various languages.
 

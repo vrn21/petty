@@ -1,4 +1,4 @@
-//! petty-agent: Guest agent for petty microVMs.
+//! bouvet-agent: Guest agent for bouvet microVMs.
 //!
 //! Listens on a Unix socket (vsock-compatible) and handles JSON-RPC requests
 //! for command execution, code execution, and file operations.
@@ -16,7 +16,7 @@ use tokio::net::UnixListener;
 use tracing::{debug, error, info, warn};
 
 /// Default socket path for the agent.
-const SOCKET_PATH: &str = "/tmp/petty-agent.sock";
+const SOCKET_PATH: &str = "/tmp/bouvet-agent.sock";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,11 +24,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("petty_agent=debug".parse().unwrap()),
+                .add_directive("bouvet_agent=debug".parse().unwrap()),
         )
         .init();
 
-    info!("petty-agent starting...");
+    info!("bouvet-agent starting...");
 
     // Remove existing socket file if it exists
     let socket_path = Path::new(SOCKET_PATH);

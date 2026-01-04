@@ -10,9 +10,9 @@ use std::path::PathBuf;
 /// # Example
 ///
 /// ```no_run
-/// use petty_vm::VmBuilder;
+/// use bouvet_vm::VmBuilder;
 ///
-/// # async fn example() -> petty_vm::Result<()> {
+/// # async fn example() -> bouvet_vm::Result<()> {
 /// let vm = VmBuilder::new()
 ///     .vcpus(4)
 ///     .memory_mib(512)

@@ -1,11 +1,11 @@
-# petty-core
+# bouvet-core
 
 Sandbox orchestration. Creates VMs, connects agents, manages lifecycle.
 
 ## Build
 
 ```
-cargo build -p petty-core --release
+cargo build -p bouvet-core --release
 ```
 
 ## Usage

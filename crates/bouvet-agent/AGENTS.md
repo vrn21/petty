@@ -1,18 +1,18 @@
-# petty-agent
+# bouvet-agent
 
 Guest agent for microVMs. Runs inside VM, listens on vsock/Unix socket, executes JSON-RPC commands.
 
 ## Build
 
 ```
-cargo build -p petty-agent --release
+cargo build -p bouvet-agent --release
 ```
 
 ## Run
 
 ```
-cargo run -p petty-agent
-# Listens: /tmp/petty-agent.sock
+cargo run -p bouvet-agent
+# Listens: /tmp/bouvet-agent.sock
 ```
 
 ## Protocol
@@ -102,5 +102,5 @@ src/
 ## Test
 
 ```
-echo '{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}' | nc -U /tmp/petty-agent.sock
+echo '{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}' | nc -U /tmp/bouvet-agent.sock
 ```

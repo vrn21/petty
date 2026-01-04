@@ -1,4 +1,4 @@
-//! Petty MCP Server entry point.
+//! Bouvet MCP Server entry point.
 //!
 //! This binary starts the MCP server using both stdio and HTTP/SSE transports
 //! by default, suitable for both local AI tools (Claude Desktop, Cursor) and
@@ -10,7 +10,7 @@
 //! - **stdio**: Only stdio transport
 //! - **http**: Only HTTP/SSE transport
 
-use petty_mcp::{http, PettyConfig, PettyServer};
+use bouvet_mcp::{http, BouvetConfig, BouvetServer};
 use rmcp::transport::stdio;
 use rmcp::ServiceExt;
 use tokio::signal;
@@ -21,21 +21,21 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 async fn main() -> anyhow::Result<()> {
     // Initialize tracing - logs go to stderr (stdout is MCP transport)
     tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env().add_directive("petty_mcp=info".parse()?))
+        .with(EnvFilter::from_default_env().add_directive("bouvet_mcp=info".parse()?))
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
-    tracing::info!("Starting Petty MCP Server");
+    tracing::info!("Starting Bouvet MCP Server");
 
     // Load configuration from environment
-    let config = PettyConfig::from_env();
+    let config = BouvetConfig::from_env();
     tracing::info!(?config, "Configuration loaded");
 
     // Validate configuration (warn-only to support development environments)
     config.validate_warn();
 
     // Create the server
-    let server = PettyServer::new(config.clone());
+    let server = BouvetServer::new(config.clone());
 
     // Start the warm pool filler (if enabled)
     server.start_pool().await;
@@ -101,16 +101,16 @@ async fn main() -> anyhow::Result<()> {
 
     // Log startup summary
     match config.transport_mode {
-        petty_mcp::TransportMode::Both => {
+        bouvet_mcp::TransportMode::Both => {
             tracing::info!(
                 http_addr = %config.http_addr,
                 "Server ready (stdio + HTTP/SSE)"
             );
         }
-        petty_mcp::TransportMode::Http => {
+        bouvet_mcp::TransportMode::Http => {
             tracing::info!(http_addr = %config.http_addr, "Server ready (HTTP/SSE only)");
         }
-        petty_mcp::TransportMode::Stdio => {
+        bouvet_mcp::TransportMode::Stdio => {
             tracing::info!("Server ready (stdio only)");
         }
     }

@@ -11,7 +11,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use petty_core::{SandboxPool, PoolConfig, SandboxConfig};
+//! use bouvet_core::{SandboxPool, PoolConfig, SandboxConfig};
 //!
 //! let config = PoolConfig {
 //!     min_size: 3,

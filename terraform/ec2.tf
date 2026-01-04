@@ -7,12 +7,12 @@
 # -----------------------------------------------------------------------------
 # EC2 Instance
 # -----------------------------------------------------------------------------
-resource "aws_instance" "petty" {
+resource "aws_instance" "bouvet" {
   ami                         = data.aws_ami.debian.id
   instance_type               = var.instance_type
   key_name                    = var.ssh_key_name
   subnet_id                   = aws_subnet.public.id
-  vpc_security_group_ids      = [aws_security_group.petty_mcp.id]
+  vpc_security_group_ids      = [aws_security_group.bouvet_mcp.id]
   user_data_replace_on_change = true
 
   # Root volume: encrypted gp3
@@ -23,7 +23,7 @@ resource "aws_instance" "petty" {
     delete_on_termination = true
 
     tags = {
-      Name = "petty-root"
+      Name = "bouvet-root"
     }
   }
 
@@ -34,22 +34,22 @@ resource "aws_instance" "petty" {
   })
 
   tags = {
-    Name = "petty-mcp"
+    Name = "bouvet-mcp"
   }
 }
 
 # -----------------------------------------------------------------------------
 # Elastic IP
 # -----------------------------------------------------------------------------
-resource "aws_eip" "petty" {
+resource "aws_eip" "bouvet" {
   domain = "vpc"
 
   tags = {
-    Name = "petty-eip"
+    Name = "bouvet-eip"
   }
 }
 
-resource "aws_eip_association" "petty" {
-  instance_id   = aws_instance.petty.id
-  allocation_id = aws_eip.petty.id
+resource "aws_eip_association" "bouvet" {
+  instance_id   = aws_instance.bouvet.id
+  allocation_id = aws_eip.bouvet.id
 }

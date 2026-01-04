@@ -1,14 +1,14 @@
-//! # petty-vm
+//! # bouvet-vm
 //!
-//! MicroVM management layer for Petty agentic sandbox.
+//! MicroVM management layer for Bouvet agentic sandbox.
 //! Provides a high-level abstraction over firepilot/Firecracker.
 //!
 //! ## Quick Start
 //!
 //! ```no_run
-//! use petty_vm::VmBuilder;
+//! use bouvet_vm::VmBuilder;
 //!
-//! # async fn example() -> petty_vm::Result<()> {
+//! # async fn example() -> bouvet_vm::Result<()> {
 //! // Create and start a VM using the builder pattern
 //! let vm = VmBuilder::new()
 //!     .vcpus(2)
@@ -19,7 +19,7 @@
 //!     .await?;
 //!
 //! // VM is now running
-//! assert_eq!(vm.state(), petty_vm::VmState::Running);
+//! assert_eq!(vm.state(), bouvet_vm::VmState::Running);
 //!
 //! // Cleanup
 //! vm.destroy().await?;

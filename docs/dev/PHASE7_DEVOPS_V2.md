@@ -1,6 +1,6 @@
 # Phase 7: AWS Deployment (Refined v2)
 
-> Deploying Petty on c5.metal Spot Instance with Docker container.
+> Deploying Bouvet on c5.metal Spot Instance with Docker container.
 
 ---
 
@@ -8,7 +8,7 @@
 
 This document outlines a streamlined deployment strategy:
 
-- **Docker multi-stage build**: petty-mcp compiled from source INSIDE Docker build
+- **Docker multi-stage build**: bouvet-mcp compiled from source INSIDE Docker build
 - **Download from source (in Docker)**: Firecracker, jailer, and kernel downloaded during Docker build
 - **S3 for rootfs only**: Only the ext4 image needs to be in your S3 (fetched at runtime)
 - **Manual control**: Start/stop instance manually (no spot termination handling)
@@ -36,14 +36,14 @@ This document outlines a streamlined deployment strategy:
 │  │                  c5.metal (Spot)                      │    │
 │  │                                                       │    │
 │  │  ┌─────────────────────────────────────────────────┐ │    │
-│  │  │           Docker Container (petty-mcp)          │ │    │
+│  │  │           Docker Container (bouvet-mcp)          │ │    │
 │  │  │                                                  │ │    │
 │  │  │  /usr/local/bin/                                 │ │    │
-│  │  │  ├── petty-mcp    (built from source)            │ │    │
+│  │  │  ├── bouvet-mcp    (built from source)            │ │    │
 │  │  │  ├── firecracker  (from GitHub)                  │ │    │
 │  │  │  └── jailer       (from GitHub)                  │ │    │
 │  │  │                                                  │ │    │
-│  │  │  /var/lib/petty/                                 │ │    │
+│  │  │  /var/lib/bouvet/                                 │ │    │
 │  │  │  ├── vmlinux         (from AWS S3, baked in)     │ │    │
 │  │  │  └── debian-devbox   (from YOUR S3, at runtime)  │ │    │
 │  │  │                                                  │ │    │
@@ -77,7 +77,7 @@ The Dockerfile uses 5 stages for optimal caching and minimal image size:
 | ---------- | ----------- | ----------------------------------------- |
 | 1. chef    | rust:1.83   | Install cargo-chef for dependency caching |
 | 2. planner | chef        | Generate dependency recipe                |
-| 3. builder | chef        | Compile dependencies + petty-mcp          |
+| 3. builder | chef        | Compile dependencies + bouvet-mcp          |
 | 4. fetcher | debian:slim | Download Firecracker, jailer, kernel      |
 | 5. runtime | debian:slim | Minimal production image (~150MB)         |
 
@@ -95,7 +95,7 @@ The Dockerfile uses 5 stages for optimal caching and minimal image size:
 
 ## MCP Server Transport Modes
 
-**petty-mcp now supports dual transport** via `rmcp` SDK:
+**bouvet-mcp now supports dual transport** via `rmcp` SDK:
 
 | Mode               | Env Value | stdio | HTTP | Use Case               |
 | ------------------ | --------- | ----- | ---- | ---------------------- |
@@ -133,26 +133,26 @@ Systemd is still the right choice because:
 3. **Boot startup**: Service starts on instance boot
 4. **Environment**: Clean env var handling
 
-The HTTP server runs as part of the petty-mcp process - no separate web server needed.
+The HTTP server runs as part of the bouvet-mcp process - no separate web server needed.
 
 ---
 
 ## Environment Variables
 
-**Already implemented in `petty-mcp`** (see `crates/petty-mcp/src/config.rs`):
+**Already implemented in `bouvet-mcp`** (see `crates/bouvet-mcp/src/config.rs`):
 
 | Variable               | Default                      | Description                      |
 | ---------------------- | ---------------------------- | -------------------------------- |
-| `PETTY_KERNEL`         | `/var/lib/petty/vmlinux`     | Path to kernel image             |
-| `PETTY_ROOTFS`         | `/var/lib/petty/debian.ext4` | Path to rootfs image             |
-| `PETTY_FIRECRACKER`    | `/usr/bin/firecracker`       | Path to Firecracker binary       |
-| `PETTY_CHROOT`         | `/tmp/petty`                 | Working directory for VMs        |
-| `PETTY_POOL_ENABLED`   | `true`                       | Enable warm sandbox pool         |
-| `PETTY_POOL_MIN_SIZE`  | `3`                          | Minimum warm sandboxes           |
-| `PETTY_POOL_MAX_BOOTS` | `2`                          | Max concurrent pool boots        |
-| `PETTY_TRANSPORT`      | `both`                       | Transport mode (stdio/http/both) |
-| `PETTY_HTTP_HOST`      | `0.0.0.0`                    | HTTP bind address                |
-| `PETTY_HTTP_PORT`      | `8080`                       | HTTP port                        |
+| `BOUVET_KERNEL`         | `/var/lib/bouvet/vmlinux`     | Path to kernel image             |
+| `BOUVET_ROOTFS`         | `/var/lib/bouvet/debian.ext4` | Path to rootfs image             |
+| `BOUVET_FIRECRACKER`    | `/usr/bin/firecracker`       | Path to Firecracker binary       |
+| `BOUVET_CHROOT`         | `/tmp/bouvet`                 | Working directory for VMs        |
+| `BOUVET_POOL_ENABLED`   | `true`                       | Enable warm sandbox pool         |
+| `BOUVET_POOL_MIN_SIZE`  | `3`                          | Minimum warm sandboxes           |
+| `BOUVET_POOL_MAX_BOOTS` | `2`                          | Max concurrent pool boots        |
+| `BOUVET_TRANSPORT`      | `both`                       | Transport mode (stdio/http/both) |
+| `BOUVET_HTTP_HOST`      | `0.0.0.0`                    | HTTP bind address                |
+| `BOUVET_HTTP_PORT`      | `8080`                       | HTTP port                        |
 | `RUST_LOG`             | -                            | Logging level (e.g., `info`)     |
 
 ---
@@ -204,7 +204,7 @@ terraform/
 ├── iam.tf # Roles (S3 read access)
 └── scripts/
 ├── user-data.sh # Bootstrap
-└── petty-mcp.service # Systemd unit
+└── bouvet-mcp.service # Systemd unit
 
 # Optional (separate apply)
 
@@ -225,8 +225,8 @@ set -euo pipefail
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-S3_BUCKET="${S3_BUCKET:-petty-artifacts}"
-DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/vrn21/petty-mcp:latest}"
+S3_BUCKET="${S3_BUCKET:-bouvet-artifacts}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/vrn21/bouvet-mcp:latest}"
 
 # ============================================================================
 # SYSTEM SETUP
@@ -266,9 +266,9 @@ docker pull "$DOCKER_IMAGE"
 # CREATE SYSTEMD SERVICE FOR DOCKER CONTAINER
 # ============================================================================
 echo ">>> Installing systemd service..."
-cat > /etc/systemd/system/petty-mcp.service << EOF
+cat > /etc/systemd/system/bouvet-mcp.service << EOF
 [Unit]
-Description=Petty MCP Server (Docker)
+Description=Bouvet MCP Server (Docker)
 After=network.target docker.service
 Requires=docker.service
 
@@ -281,19 +281,19 @@ RestartSec=5
 ExecStartPre=/usr/bin/docker pull $DOCKER_IMAGE
 
 # Run the container
-ExecStart=/usr/bin/docker run --rm --name petty-mcp \\
+ExecStart=/usr/bin/docker run --rm --name bouvet-mcp \\
     --privileged \\
     --device=/dev/kvm \\
     -p 8080:8080 \\
-    -e PETTY_ROOTFS_S3_URL=s3://${S3_BUCKET}/debian-devbox.ext4 \\
-    -e PETTY_TRANSPORT=both \\
-    -e PETTY_HTTP_HOST=0.0.0.0 \\
-    -e PETTY_HTTP_PORT=8080 \\
+    -e BOUVET_ROOTFS_S3_URL=s3://${S3_BUCKET}/debian-devbox.ext4 \\
+    -e BOUVET_TRANSPORT=both \\
+    -e BOUVET_HTTP_HOST=0.0.0.0 \\
+    -e BOUVET_HTTP_PORT=8080 \\
     -e RUST_LOG=info \\
     $DOCKER_IMAGE
 
 # Stop the container gracefully
-ExecStop=/usr/bin/docker stop petty-mcp
+ExecStop=/usr/bin/docker stop bouvet-mcp
 
 [Install]
 WantedBy=multi-user.target
@@ -302,13 +302,13 @@ EOF
 # ============================================================================
 # ENABLE AND START SERVICE
 # ============================================================================
-echo ">>> Starting petty-mcp service..."
+echo ">>> Starting bouvet-mcp service..."
 systemctl daemon-reload
-systemctl enable petty-mcp.service
-systemctl start petty-mcp.service
+systemctl enable bouvet-mcp.service
+systemctl start bouvet-mcp.service
 
 echo ">>> Bootstrap complete!"
-echo "Service status: $(systemctl is-active petty-mcp.service)"
+echo "Service status: $(systemctl is-active bouvet-mcp.service)"
 echo ""
 echo "Container running - no Rust compilation needed!"
 echo "First start fetches rootfs from S3, subsequent starts are instant."
@@ -339,23 +339,23 @@ The bootstrap script creates a systemd service that runs the Docker container. K
 ### Pattern 1: SSH + Manual Run (Dev/Testing)
 
 ```bash
-# SSH in and run petty-mcp interactively
+# SSH in and run bouvet-mcp interactively
 ssh -i key.pem ubuntu@<ip>
-/usr/local/bin/petty-mcp
+/usr/local/bin/bouvet-mcp
 ```
 
 ### Pattern 2: SSH Tunnel (Remote Client)
 
 ```bash
 # From your local machine, proxy stdio over SSH
-ssh -i key.pem ubuntu@<ip> /usr/local/bin/petty-mcp
+ssh -i key.pem ubuntu@<ip> /usr/local/bin/bouvet-mcp
 ```
 
 MCP clients can spawn this SSH command as their "server process".
 
 ### Pattern 3: Systemd Background (Always Running)
 
-Systemd keeps petty-mcp running. Useful when:
+Systemd keeps bouvet-mcp running. Useful when:
 
 - You want warm pools pre-created
 - Multiple SSH sessions need to share state
@@ -387,21 +387,21 @@ aws s3 cp images/output/debian-devbox.ext4 s3://your-bucket/
 
 ```bash
 # Build the image locally
-docker build -f Dockerfile.server -t petty-mcp:latest .
+docker build -f Dockerfile.server -t bouvet-mcp:latest .
 
 # Build for x86_64 (from ARM Mac)
-docker build --platform linux/amd64 -f Dockerfile.server -t petty-mcp:latest .
+docker build --platform linux/amd64 -f Dockerfile.server -t bouvet-mcp:latest .
 
 # Tag for registry
-docker tag petty-mcp:latest ghcr.io/vrn21/petty-mcp:latest
+docker tag bouvet-mcp:latest ghcr.io/vrn21/bouvet-mcp:latest
 
 # Push to registry
-docker push ghcr.io/vrn21/petty-mcp:latest
+docker push ghcr.io/vrn21/bouvet-mcp:latest
 
 # Run locally for testing (requires /dev/kvm on Linux)
 docker run --privileged --device=/dev/kvm -p 8080:8080 \
-  -e PETTY_ROOTFS=/path/to/rootfs.ext4 \
-  petty-mcp:latest
+  -e BOUVET_ROOTFS=/path/to/rootfs.ext4 \
+  bouvet-mcp:latest
 ```
 
 ---
@@ -410,7 +410,7 @@ docker run --privileged --device=/dev/kvm -p 8080:8080 \
 
 ```bash
 # Build Docker image
-docker build -f Dockerfile.server -t petty-mcp:latest .
+docker build -f Dockerfile.server -t bouvet-mcp:latest .
 
 # Deploy infrastructure
 terraform apply -var="ssh_key_name=your-key" -var="s3_bucket=your-bucket"
@@ -419,11 +419,11 @@ terraform apply -var="ssh_key_name=your-key" -var="s3_bucket=your-bucket"
 ssh -i ~/.ssh/key.pem ubuntu@$(terraform output -raw public_ip)
 
 # Check service
-sudo systemctl status petty-mcp
-sudo journalctl -u petty-mcp -f
+sudo systemctl status bouvet-mcp
+sudo journalctl -u bouvet-mcp -f
 
 # View logs
-tail -f /var/log/petty/mcp.log
+tail -f /var/log/bouvet/mcp.log
 
 # Manual stop (saves money)
 aws ec2 stop-instances --instance-ids $(terraform output -raw instance_id)
@@ -445,8 +445,8 @@ terraform destroy
 | `region`       | No       | us-east-1 | AWS region             |
 | `spot_price`   | No       | 1.50      | Max spot bid           |
 | `s3_bucket`    | Yes      | -         | Your S3 bucket name    |
-| `petty_repo`   | No       | (default) | Git repo URL for petty |
-| `petty_branch` | No       | main      | Git branch to build    |
+| `bouvet_repo`   | No       | (default) | Git repo URL for bouvet |
+| `bouvet_branch` | No       | main      | Git branch to build    |
 
 ---
 
@@ -461,7 +461,7 @@ Bootstrap (once):
   curl → /usr/local/bin/firecracker
 
 Running microVMs (many times):
-  petty-mcp → fork() → /usr/local/bin/firecracker (reuses binary)
+  bouvet-mcp → fork() → /usr/local/bin/firecracker (reuses binary)
                     → /usr/local/bin/firecracker (reuses binary)
                     → /usr/local/bin/firecracker (reuses binary)
 ```
@@ -472,8 +472,8 @@ Each `Firecracker` process is a new fork, but uses the same binary on disk. No n
 
 Same principle:
 
-- **Kernel**: Downloaded once to `/var/lib/petty/vmlinux`
-- **Rootfs**: Downloaded once to `/var/lib/petty/debian-devbox.ext4`
+- **Kernel**: Downloaded once to `/var/lib/bouvet/vmlinux`
+- **Rootfs**: Downloaded once to `/var/lib/bouvet/debian-devbox.ext4`
 
 Each VM uses Copy-on-Write (COW) overlay on the rootfs, so changes in one VM don't affect others.
 
@@ -502,9 +502,9 @@ Each VM uses Copy-on-Write (COW) overlay on the rootfs, so changes in one VM don
 
 **Mitigation**: AWS kernels are well-tested with Firecracker. If issues arise, build a custom kernel.
 
-### 4. petty-mcp Environment Variables ✅
+### 4. bouvet-mcp Environment Variables ✅
 
-**Already implemented!** The `petty-mcp` server reads from environment via `PettyConfig::from_env()`.
+**Already implemented!** The `bouvet-mcp` server reads from environment via `BouvetConfig::from_env()`.
 
 No code changes needed - just set the environment variables in systemd unit.
 
@@ -516,8 +516,8 @@ No code changes needed - just set the environment variables in systemd unit.
 - [ ] Firecracker downloads from GitHub on first boot
 - [ ] Kernel downloads from AWS S3 on first boot
 - [ ] Rootfs downloads from your S3 on first boot
-- [ ] petty-mcp builds from source on first boot
-- [ ] petty-mcp service auto-starts
+- [ ] bouvet-mcp builds from source on first boot
+- [ ] bouvet-mcp service auto-starts
 - [ ] SSH access works
 - [ ] Manual stop/start works
 - [ ] Environment variables configure all paths
@@ -526,9 +526,9 @@ No code changes needed - just set the environment variables in systemd unit.
 
 ## Future Enhancements
 
-- [ ] AMI baking (pre-compile petty-mcp for instant boot)
+- [ ] AMI baking (pre-compile bouvet-mcp for instant boot)
 - [ ] Automated image building (EC2 runs `make rootfs`)
 - [x] HTTP transport for remote MCP access ✅ (implemented)
-- [x] Health endpoint in petty-mcp ✅ (implemented)
+- [x] Health endpoint in bouvet-mcp ✅ (implemented)
 - [ ] CloudWatch metrics and alarms
 - [ ] Spot interruption handling (graceful shutdown)

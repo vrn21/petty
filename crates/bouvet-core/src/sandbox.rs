@@ -69,7 +69,7 @@ impl fmt::Display for SandboxState {
 /// in the isolated environment.
 pub struct Sandbox {
     id: SandboxId,
-    vm: petty_vm::VirtualMachine,
+    vm: bouvet_vm::VirtualMachine,
     client: Arc<Mutex<AgentClient>>,
     config: SandboxConfig,
     state: SandboxState,
@@ -89,7 +89,7 @@ impl Sandbox {
         tracing::info!(sandbox_id = %id, "Creating sandbox");
 
         // 1. Build VM config
-        let vm_config = petty_vm::VmBuilder::new()
+        let vm_config = bouvet_vm::VmBuilder::new()
             .vcpus(config.vcpu_count)
             .memory_mib(config.memory_mib)
             .kernel(&config.kernel_path)
@@ -98,7 +98,7 @@ impl Sandbox {
             .build_config();
 
         // 2. Create and boot VM
-        let vm = petty_vm::VirtualMachine::create(vm_config).await?;
+        let vm = bouvet_vm::VirtualMachine::create(vm_config).await?;
         tracing::debug!(sandbox_id = %id, "VM created and started");
 
         // 3. Get vsock path and connect to agent
