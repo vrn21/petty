@@ -92,6 +92,13 @@ impl Sandbox {
         let vsock_config =
             bouvet_vm::VsockConfig::for_vm(config.vsock_cid, &config.chroot_path, &id.to_string());
 
+        // Ensure vsock directory exists
+        if let Some(parent) = vsock_config.uds_path.parent() {
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                CoreError::Connection(format!("Failed to create vsock directory: {}", e))
+            })?;
+        }
+
         // 1. Build VM config with unique vsock path
         let vm_config = bouvet_vm::VmBuilder::new()
             .vcpus(config.vcpu_count)
@@ -103,7 +110,15 @@ impl Sandbox {
             .build_config();
 
         // 2. Create and boot VM
-        let vm = bouvet_vm::VirtualMachine::create(vm_config).await?;
+        let vm = match bouvet_vm::VirtualMachine::create(vm_config).await {
+            Ok(vm) => vm,
+            Err(e) => {
+                // Cleanup directory if VM creation fails
+                let vsock_dir = config.chroot_path.join(id.to_string());
+                let _ = tokio::fs::remove_dir_all(&vsock_dir).await;
+                return Err(e.into());
+            }
+        };
         tracing::debug!(sandbox_id = %id, "VM created and started");
 
         // 3. Get vsock path and connect to agent
@@ -243,6 +258,12 @@ impl Sandbox {
         tracing::info!(sandbox_id = %self.id, "Destroying sandbox");
         self.state = SandboxState::Destroyed;
         self.vm.destroy().await?;
+
+        // Clean up vsock directory
+        let vsock_dir = self.config.chroot_path.join(self.id.to_string());
+        if let Err(e) = tokio::fs::remove_dir_all(&vsock_dir).await {
+            tracing::warn!(sandbox_id = %self.id, error = %e, "Failed to remove sandbox directory");
+        }
         Ok(())
     }
 

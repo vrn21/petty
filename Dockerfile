@@ -11,7 +11,7 @@
 #
 # Usage:
 #   docker build -f Dockerfile.server -t bouvet-mcp:latest .
-#   docker run -d --privileged -p 8080:8080 \
+#   docker run -d --privileged --security-opt seccomp=unconfined -p 8080:8080 \
 #     -e BOUVET_ROOTFS_URL=s3://your-bucket/debian-devbox.ext4 \
 #     bouvet-mcp:latest
 # =============================================================================
