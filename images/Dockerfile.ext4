@@ -17,7 +17,7 @@ RUN mkdir -p /rootfs && tar -C /rootfs -xf /rootfs.tar && rm -f /rootfs.tar
 # Build arguments for image configuration
 # REDUCED: Start with smaller initial size, resize2fs will shrink it further
 ARG IMAGE_SIZE=1500M
-ARG IMAGE_LABEL=petty-rootfs
+ARG IMAGE_LABEL=bouvet-rootfs
 
 # Create ext4 filesystem directly from directory contents
 # mke2fs -d populates the filesystem without needing to mount it

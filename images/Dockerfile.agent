@@ -1,4 +1,4 @@
-# Dockerfile.agent - Cross-compile petty-agent inside Docker
+# Dockerfile.agent - Cross-compile bouvet-agent inside Docker
 # This allows building Linux musl binaries from macOS without cross-toolchains
 
 FROM rust:slim-bookworm AS builder
@@ -22,30 +22,30 @@ WORKDIR /build
 COPY Cargo.toml ./
 
 # Create dummy crate structure for dependency caching
-RUN mkdir -p crates/petty-agent/src crates/petty-core/src crates/petty-vm/src crates/petty-mcp/src && \
-    echo "fn main() {}" > crates/petty-agent/src/main.rs && \
-    echo "" > crates/petty-core/src/lib.rs && \
-    echo "" > crates/petty-vm/src/lib.rs && \
-    echo "" > crates/petty-mcp/src/lib.rs
+RUN mkdir -p crates/bouvet-agent/src crates/bouvet-core/src crates/bouvet-vm/src crates/bouvet-mcp/src && \
+    echo "fn main() {}" > crates/bouvet-agent/src/main.rs && \
+    echo "" > crates/bouvet-core/src/lib.rs && \
+    echo "" > crates/bouvet-vm/src/lib.rs && \
+    echo "" > crates/bouvet-mcp/src/lib.rs
 
 # Copy all Cargo.toml files
-COPY crates/petty-agent/Cargo.toml crates/petty-agent/
-COPY crates/petty-core/Cargo.toml crates/petty-core/
-COPY crates/petty-vm/Cargo.toml crates/petty-vm/
-COPY crates/petty-mcp/Cargo.toml crates/petty-mcp/
+COPY crates/bouvet-agent/Cargo.toml crates/bouvet-agent/
+COPY crates/bouvet-core/Cargo.toml crates/bouvet-core/
+COPY crates/bouvet-vm/Cargo.toml crates/bouvet-vm/
+COPY crates/bouvet-mcp/Cargo.toml crates/bouvet-mcp/
 
 # Build dependencies only (cached layer)
-RUN cargo build -p petty-agent --release --target ${RUST_TARGET} 2>/dev/null || true
+RUN cargo build -p bouvet-agent --release --target ${RUST_TARGET} 2>/dev/null || true
 
 # Now copy actual source code
 COPY crates ./crates
 
 # Build the agent for real
-RUN cargo build -p petty-agent --release --target ${RUST_TARGET}
+RUN cargo build -p bouvet-agent --release --target ${RUST_TARGET}
 
 # Copy the binary to a known location
-RUN cp /build/target/${RUST_TARGET}/release/petty-agent /petty-agent
+RUN cp /build/target/${RUST_TARGET}/release/bouvet-agent /bouvet-agent
 
 # Output stage - just the binary
 FROM scratch
-COPY --from=builder /petty-agent /petty-agent
+COPY --from=builder /bouvet-agent /bouvet-agent
