@@ -25,7 +25,7 @@ endif
 # OTHER CONFIGURATION
 # ============================================================================
 IMAGE_SIZE ?= 2500M
-IMAGE_NAME ?= petty-devbox
+IMAGE_NAME ?= bouvet-devbox
 OUTPUT_DIR := images/output
 AGENT_BINARY := $(OUTPUT_DIR)/bouvet-agent
 
@@ -102,10 +102,10 @@ docker-image: check-docker $(AGENT_BINARY)
 $(OUTPUT_DIR)/rootfs.tar: docker-image
 	@echo "==> Exporting Docker image to tarball..."
 	@mkdir -p $(OUTPUT_DIR)
-	@docker rm -f petty-export-temp 2>/dev/null || true
-	docker create --platform $(DOCKER_PLATFORM) --name petty-export-temp $(IMAGE_NAME)
-	docker export petty-export-temp > $@
-	docker rm petty-export-temp
+	@docker rm -f bouvet-export-temp 2>/dev/null || true
+	docker create --platform $(DOCKER_PLATFORM) --name bouvet-export-temp $(IMAGE_NAME)
+	docker export bouvet-export-temp > $@
+	docker rm bouvet-export-temp
 	@echo "==> Cleaning up Docker build cache to save space..."
 	@docker builder prune -f 2>/dev/null || true
 	@echo "✓ Rootfs tarball: $@"
@@ -118,7 +118,7 @@ $(OUTPUT_DIR)/debian-devbox.ext4: $(OUTPUT_DIR)/rootfs.tar
 	DOCKER_BUILDKIT=1 docker build \
 		--platform $(DOCKER_PLATFORM) \
 		--build-arg IMAGE_SIZE=$(IMAGE_SIZE) \
-		--build-arg IMAGE_LABEL=petty-devbox \
+		--build-arg IMAGE_LABEL=bouvet-devbox \
 		-f images/Dockerfile.ext4 \
 		--output type=local,dest=$(OUTPUT_DIR) \
 		images/
