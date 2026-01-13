@@ -5,6 +5,7 @@ use crate::error::CoreError;
 use crate::sandbox::{Sandbox, SandboxId};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -55,6 +56,8 @@ impl ManagerConfig {
 pub struct SandboxManager {
     sandboxes: Arc<RwLock<HashMap<SandboxId, Sandbox>>>,
     config: ManagerConfig,
+    /// Counter for assigning unique vsock CIDs (starts at 3, the minimum valid CID).
+    cid_counter: AtomicU32,
 }
 
 impl SandboxManager {
@@ -64,6 +67,7 @@ impl SandboxManager {
         Self {
             sandboxes: Arc::new(RwLock::new(HashMap::new())),
             config,
+            cid_counter: AtomicU32::new(3), // Start at 3 (minimum valid CID)
         }
     }
 
@@ -96,6 +100,10 @@ impl SandboxManager {
                 )));
             }
         }
+
+        // Assign a unique CID to prevent vsock collisions
+        let mut config = config;
+        config.vsock_cid = self.cid_counter.fetch_add(1, Ordering::Relaxed);
 
         let sandbox = Sandbox::create(config).await?;
         let id = sandbox.id();

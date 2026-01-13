@@ -36,7 +36,7 @@ use crate::config::SandboxConfig;
 use crate::error::CoreError;
 use crate::sandbox::Sandbox;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, Notify, Semaphore};
@@ -163,6 +163,8 @@ pub struct SandboxPool {
     filler_handle: Option<JoinHandle<()>>,
     /// Pool statistics.
     stats: Arc<PoolStats>,
+    /// Counter for assigning unique vsock CIDs (starts at 3, the minimum valid CID).
+    cid_counter: Arc<AtomicU32>,
 }
 
 impl SandboxPool {
@@ -184,6 +186,7 @@ impl SandboxPool {
             shutdown_notify: Arc::new(Notify::new()),
             filler_handle: None,
             stats: Arc::new(PoolStats::default()),
+            cid_counter: Arc::new(AtomicU32::new(10000)), // Start at offset to avoid collision with manager's CIDs
             config,
         }
     }
@@ -204,9 +207,19 @@ impl SandboxPool {
         let shutdown_notify = Arc::clone(&self.shutdown_notify);
         let semaphore = Arc::clone(&self.boot_semaphore);
         let stats = Arc::clone(&self.stats);
+        let cid_counter = Arc::clone(&self.cid_counter);
 
         let handle = tokio::spawn(async move {
-            Self::filler_loop(pool, config, shutdown, shutdown_notify, semaphore, stats).await;
+            Self::filler_loop(
+                pool,
+                config,
+                shutdown,
+                shutdown_notify,
+                semaphore,
+                stats,
+                cid_counter,
+            )
+            .await;
         });
 
         self.filler_handle = Some(handle);
@@ -224,6 +237,7 @@ impl SandboxPool {
         shutdown_notify: Arc<Notify>,
         semaphore: Arc<Semaphore>,
         stats: Arc<PoolStats>,
+        cid_counter: Arc<AtomicU32>,
     ) {
         tracing::debug!("Filler loop started");
 
@@ -271,7 +285,9 @@ impl SandboxPool {
                         };
 
                         let pool = Arc::clone(&pool);
-                        let cfg = config.sandbox_config.clone();
+                        let mut cfg = config.sandbox_config.clone();
+                        // Assign a unique CID to prevent vsock collisions
+                        cfg.vsock_cid = cid_counter.fetch_add(1, Ordering::Relaxed);
                         let stats = Arc::clone(&stats);
                         let shutdown = Arc::clone(&shutdown);
                         let min_size = config.min_size;
@@ -372,7 +388,10 @@ impl SandboxPool {
         // Pool exhausted, perform cold-start
         self.stats.cold_misses.fetch_add(1, Ordering::Relaxed);
         tracing::info!("Pool empty, performing cold-start");
-        Sandbox::create(self.config.sandbox_config.clone()).await
+        let mut cfg = self.config.sandbox_config.clone();
+        // Assign a unique CID to prevent vsock collisions
+        cfg.vsock_cid = self.cid_counter.fetch_add(1, Ordering::Relaxed);
+        Sandbox::create(cfg).await
     }
 
     /// Get the current number of sandboxes in the pool.
