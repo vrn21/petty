@@ -2,6 +2,7 @@
 
 use crate::config::MachineConfig;
 use crate::error::{Result, VmError};
+use crate::machine_config::configure_machine;
 use crate::vsock::configure_vsock;
 use firepilot::builder::drive::DriveBuilder;
 use firepilot::builder::executor::FirecrackerExecutorBuilder;
@@ -160,6 +161,10 @@ impl VirtualMachine {
             .chroot_path
             .join(id.to_string())
             .join("firecracker.socket");
+
+        // Configure machine resources BEFORE starting the VM
+        // This is required - Firecracker needs explicit vcpu/memory config
+        configure_machine(&socket_path, config.vcpu_count, config.memory_mib).await?;
 
         // Configure vsock BEFORE starting the VM (Firecracker requires this)
         if let Some(vsock_config) = &config.vsock {

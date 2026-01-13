@@ -39,6 +39,7 @@ mod builder;
 mod config;
 mod error;
 mod machine;
+mod machine_config;
 mod vsock;
 
 pub use builder::VmBuilder;
