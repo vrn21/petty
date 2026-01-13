@@ -11,6 +11,8 @@ pub struct SandboxConfig {
     pub kernel_path: PathBuf,
     /// Path to rootfs image.
     pub rootfs_path: PathBuf,
+    /// Working directory for VM sockets and state.
+    pub chroot_path: PathBuf,
     /// Memory in MiB (default: 256).
     pub memory_mib: u32,
     /// vCPU count (default: 2).
@@ -26,6 +28,7 @@ impl Default for SandboxConfig {
         Self {
             kernel_path: PathBuf::new(),
             rootfs_path: PathBuf::new(),
+            chroot_path: PathBuf::from("/tmp/bouvet"),
             memory_mib: 256,
             vcpu_count: 2,
             timeout: None,
@@ -101,6 +104,12 @@ impl SandboxConfigBuilder {
     /// Set vsock guest CID (must be >= 3).
     pub fn vsock_cid(mut self, cid: u32) -> Self {
         self.config.vsock_cid = cid;
+        self
+    }
+
+    /// Set the chroot/working directory path.
+    pub fn chroot_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.config.chroot_path = path.into();
         self
     }
 

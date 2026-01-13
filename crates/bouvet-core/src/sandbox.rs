@@ -88,13 +88,18 @@ impl Sandbox {
         let id = SandboxId::new();
         tracing::info!(sandbox_id = %id, "Creating sandbox");
 
-        // 1. Build VM config
+        // Generate unique vsock config with per-VM UDS path
+        let vsock_config =
+            bouvet_vm::VsockConfig::for_vm(config.vsock_cid, &config.chroot_path, &id.to_string());
+
+        // 1. Build VM config with unique vsock path
         let vm_config = bouvet_vm::VmBuilder::new()
             .vcpus(config.vcpu_count)
             .memory_mib(config.memory_mib)
             .kernel(&config.kernel_path)
             .rootfs(&config.rootfs_path)
-            .with_vsock(config.vsock_cid)
+            .chroot_path(&config.chroot_path)
+            .with_vsock_config(vsock_config)
             .build_config();
 
         // 2. Create and boot VM
