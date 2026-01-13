@@ -18,6 +18,11 @@ impl SandboxId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
+
+    /// Get the underlying UUID.
+    pub fn as_uuid(&self) -> Uuid {
+        self.0
+    }
 }
 
 impl Default for SandboxId {
@@ -109,8 +114,8 @@ impl Sandbox {
             .with_vsock_config(vsock_config)
             .build_config();
 
-        // 2. Create and boot VM
-        let vm = match bouvet_vm::VirtualMachine::create(vm_config).await {
+        // 2. Create and boot VM with the same ID as the sandbox
+        let vm = match bouvet_vm::VirtualMachine::create_with_id(id.as_uuid(), vm_config).await {
             Ok(vm) => vm,
             Err(e) => {
                 // Cleanup directory if VM creation fails

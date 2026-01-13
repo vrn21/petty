@@ -62,10 +62,16 @@ impl VirtualMachine {
     /// # Errors
     /// Returns an error if the VM creation or startup fails.
     pub async fn create(config: MachineConfig) -> Result<Self> {
+        Self::create_with_id(Uuid::new_v4(), config).await
+    }
+
+    /// Create and boot a new MicroVM with an explicit VM ID.
+    ///
+    /// Use this when you need to control the VM ID (e.g., to match a parent sandbox ID).
+    pub async fn create_with_id(id: Uuid, config: MachineConfig) -> Result<Self> {
         // Validate configuration
         config.validate()?;
 
-        let id = Uuid::new_v4();
         tracing::info!(%id, "Creating new MicroVM");
 
         // Build kernel configuration
