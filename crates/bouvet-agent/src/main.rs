@@ -80,7 +80,13 @@ async fn handle_connection(
     let trimmed = line.trim();
     if let Some(port_str) = trimmed.strip_prefix("CONNECT ") {
         // Parse the port and send OK response
-        let port: u32 = port_str.parse().unwrap_or(GUEST_PORT);
+        let port: u32 = match port_str.parse() {
+            Ok(p) => p,
+            Err(_) => {
+                warn!(port_str = %port_str, "Invalid port in CONNECT, using default");
+                GUEST_PORT
+            }
+        };
         debug!(port = port, "received CONNECT handshake");
 
         writer
@@ -92,7 +98,11 @@ async fn handle_connection(
         line.clear();
     } else if !trimmed.is_empty() {
         // First line was not a CONNECT, treat it as a JSON request
-        debug!(request = %trimmed, "received request (no handshake)");
+        debug!(
+            request_preview = %if trimmed.len() > 200 { &trimmed[..200] } else { trimmed },
+            request_len = trimmed.len(),
+            "received request (no handshake)"
+        );
 
         let response = match serde_json::from_str::<Request>(trimmed) {
             Ok(req) => handle_request(req),
@@ -126,7 +136,11 @@ async fn handle_connection(
             continue;
         }
 
-        debug!(request = %trimmed, "received request");
+        debug!(
+            request_preview = %if trimmed.len() > 200 { &trimmed[..200] } else { trimmed },
+            request_len = trimmed.len(),
+            "received request"
+        );
 
         // Parse request and handle
         let response = match serde_json::from_str::<Request>(trimmed) {
