@@ -130,7 +130,7 @@ RUN chmod +x /usr/local/bin/bouvet-mcp \
 # Environment variables with defaults
 ENV BOUVET_KERNEL=/var/lib/bouvet/vmlinux
 ENV BOUVET_ROOTFS=/var/lib/bouvet/debian-devbox.ext4
-ENV BOUVET_ROOTFS_URL=https://petty-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4
+ENV BOUVET_ROOTFS_URL=https://bouvet-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4
 ENV BOUVET_FIRECRACKER=/usr/local/bin/firecracker
 ENV BOUVET_CHROOT=/tmp/bouvet
 ENV BOUVET_POOL_ENABLED=true

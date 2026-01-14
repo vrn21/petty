@@ -268,12 +268,13 @@ curl -sSL https://github.com/firecracker-microvm/firecracker/releases/download/v
 sudo mv /tmp/release-v${FC_VERSION}-${ARCH}/firecracker-* /usr/local/bin/firecracker
 sudo mv /tmp/release-v${FC_VERSION}-${ARCH}/jailer-* /usr/local/bin/jailer
 
-# Download kernel
-curl -sSL https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/${ARCH}/kernels/vmlinux.bin | \
+# Download kernel (use amd64 or arm64 based on architecture)
+KERNEL_ARCH=$([ "$ARCH" = "aarch64" ] && echo "arm64" || echo "amd64")
+curl -sSL https://storage.googleapis.com/fireactions/kernels/${KERNEL_ARCH}/5.10/vmlinux | \
   sudo tee /var/lib/bouvet/vmlinux > /dev/null
 
-# Download or build rootfs
-curl -sSL https://your-bucket.s3.amazonaws.com/debian-devbox.ext4 | \
+# Download rootfs
+curl -sSL https://bouvet-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4 | \
   sudo tee /var/lib/bouvet/debian-devbox.ext4 > /dev/null
 
 # Build bouvet-mcp from source

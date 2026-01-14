@@ -31,10 +31,28 @@ apt-get update
 apt-get upgrade -y
 
 # -----------------------------------------------------------------------------
-# 2. Install Docker
+# 2. Install Docker CE (Official Repository)
 # -----------------------------------------------------------------------------
-echo "[2/5] Installing Docker..."
-apt-get install -y docker.io
+echo "[2/5] Installing Docker CE from official repository..."
+
+# Install prerequisites
+apt-get install -y ca-certificates curl gnupg
+
+# Add Docker's official GPG key
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Add Docker repository
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Install Docker CE
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
 systemctl enable docker
 systemctl start docker
 
@@ -43,17 +61,25 @@ if ! docker info > /dev/null 2>&1; then
     echo "ERROR: Docker failed to start"
     exit 1
 fi
-echo "       Docker installed successfully"
+echo "       Docker CE installed successfully: $(docker --version)"
 
 # -----------------------------------------------------------------------------
 # 3. Configure KVM permissions (persistent)
 # -----------------------------------------------------------------------------
 echo "[3/5] Configuring KVM permissions..."
 if [ -e /dev/kvm ]; then
+    # Set permissions
     chmod 666 /dev/kvm
+    
     # Create udev rule for persistent permissions
     echo 'KERNEL=="kvm", MODE="0666"' > /etc/udev/rules.d/99-kvm.rules
     udevadm control --reload-rules
+    udevadm trigger
+    
+    # Create kvm group if it doesn't exist and add root
+    groupadd -f kvm
+    usermod -aG kvm root
+    
     echo "       KVM permissions configured"
 else
     echo "WARNING: /dev/kvm not found - this instance may not support nested virtualization"

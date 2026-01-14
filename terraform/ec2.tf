@@ -10,6 +10,17 @@
 resource "aws_instance" "bouvet" {
   ami                         = data.aws_ami.debian.id
   instance_type               = var.instance_type
+
+  # Use spot instance for cost savings (~70% cheaper than on-demand)
+  # WARNING: Spot instances can be interrupted with 2-minute notice
+  instance_market_options {
+    market_type = "spot"
+    spot_options {
+      instance_interruption_behavior = "terminate"
+      spot_instance_type             = "one-time"
+    }
+  }
+
   key_name                    = var.ssh_key_name
   subnet_id                   = aws_subnet.public.id
   vpc_security_group_ids      = [aws_security_group.bouvet_mcp.id]

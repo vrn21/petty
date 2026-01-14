@@ -79,7 +79,12 @@ echo "       Downloaded jailer ($(du -h jailer | cut -f1))"
 # -----------------------------------------------------------------------------
 echo "[2/3] Downloading kernel..."
 
-KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/${ARCH}/kernels/vmlinux.bin"
+# Use fireactions kernel (more reliable)
+if [ "$ARCH" = "aarch64" ]; then
+    KERNEL_URL="https://storage.googleapis.com/fireactions/kernels/arm64/5.10/vmlinux"
+else
+    KERNEL_URL="https://storage.googleapis.com/fireactions/kernels/amd64/5.10/vmlinux"
+fi
 
 if ! curl -sSL -o vmlinux "$KERNEL_URL"; then
     echo "ERROR: Failed to download kernel from $KERNEL_URL"

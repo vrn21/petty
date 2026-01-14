@@ -19,9 +19,9 @@ All configuration is done via environment variables. The server reads these at s
 
 ### Rootfs Source
 
-| Variable            | Default                                                                 | Description                                   |
-| ------------------- | ----------------------------------------------------------------------- | --------------------------------------------- |
-| `BOUVET_ROOTFS_URL` | `https://petty-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4` | URL to download rootfs if not present locally |
+| Variable            | Default                                                                  | Description                                   |
+| ------------------- | ------------------------------------------------------------------------ | --------------------------------------------- |
+| `BOUVET_ROOTFS_URL` | `https://bouvet-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4` | URL to download rootfs if not present locally |
 
 > [!NOTE]
 > The rootfs is downloaded automatically on first startup if `BOUVET_ROOTFS` doesn't exist at the configured path.
