@@ -105,6 +105,11 @@ ExecStartPre=/usr/bin/docker pull ${docker_image}
 ExecStart=/usr/bin/docker run --rm --name bouvet-mcp \
     --privileged \
     --device=/dev/kvm \
+    --security-opt seccomp=unconfined \
+    --security-opt apparmor=unconfined \
+    --cap-add=NET_ADMIN \
+    --cap-add=SYS_ADMIN \
+    -v /dev/kvm:/dev/kvm \
     -p 8080:8080 \
     -e BOUVET_ROOTFS_URL=${rootfs_url} \
     -e BOUVET_TRANSPORT=both \
