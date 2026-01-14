@@ -24,12 +24,19 @@ pub async fn configure_machine(
     vcpu_count: u8,
     mem_size_mib: u32,
 ) -> Result<()> {
-    tracing::debug!(vcpu_count, mem_size_mib, "Configuring machine resources");
+    let start = std::time::Instant::now();
+    tracing::debug!(
+        vcpu_count,
+        mem_size_mib,
+        socket = %socket_path.display(),
+        "Configuring machine resources"
+    );
 
     let config = MachineConfiguration::new(mem_size_mib as i32, vcpu_count as i32);
 
     let body = serde_json::to_string(&config)
         .map_err(|e| VmError::Config(format!("failed to serialize machine config: {e}")))?;
+    tracing::trace!(body = %body, "machine config request body");
 
     let uri: hyper::Uri = Uri::new(socket_path, "/machine-config").into();
 
@@ -40,11 +47,12 @@ pub async fn configure_machine(
         .body(Body::from(body))
         .map_err(|e| VmError::Config(format!("failed to build machine config request: {e}")))?;
 
+    tracing::trace!("Sending PUT /machine-config request");
     let client = Client::unix();
-    let response = client
-        .request(request)
-        .await
-        .map_err(|e| VmError::Firepilot(format!("machine config request failed: {e}")))?;
+    let response = client.request(request).await.map_err(|e| {
+        tracing::error!(error = %e, "machine config request failed");
+        VmError::Firepilot(format!("machine config request failed: {e}"))
+    })?;
 
     let status = response.status();
     if !status.is_success() {
@@ -52,13 +60,20 @@ pub async fn configure_machine(
             .await
             .unwrap_or_default();
         let body_str = String::from_utf8_lossy(&body_bytes);
+        tracing::error!(status = %status, body = %body_str, "machine config failed");
         return Err(VmError::Firepilot(format!(
             "machine config failed with status {}: {}",
             status, body_str
         )));
     }
 
-    tracing::info!(vcpu_count, mem_size_mib, "Machine resources configured");
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    tracing::info!(
+        vcpu_count,
+        mem_size_mib,
+        elapsed_ms,
+        "Machine resources configured"
+    );
     Ok(())
 }
 

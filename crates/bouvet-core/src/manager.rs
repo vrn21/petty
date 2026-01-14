@@ -63,7 +63,12 @@ pub struct SandboxManager {
 impl SandboxManager {
     /// Create a new sandbox manager.
     pub fn new(config: ManagerConfig) -> Self {
-        tracing::info!("Creating sandbox manager");
+        tracing::info!(
+            kernel_path = %config.kernel_path.display(),
+            rootfs_path = %config.rootfs_path.display(),
+            max_sandboxes = config.max_sandboxes,
+            "Creating sandbox manager"
+        );
         Self {
             sandboxes: Arc::new(RwLock::new(HashMap::new())),
             config,
@@ -90,28 +95,43 @@ impl SandboxManager {
     ///
     /// Returns an error if max_sandboxes limit is reached.
     pub async fn create(&self, config: SandboxConfig) -> Result<SandboxId, CoreError> {
+        tracing::debug!("Creating new sandbox");
+
         // Check sandbox limit
         if self.config.max_sandboxes > 0 {
             let current = self.sandboxes.read().await.len();
             if current >= self.config.max_sandboxes {
+                tracing::warn!(
+                    current,
+                    max = self.config.max_sandboxes,
+                    "Max sandbox limit reached"
+                );
                 return Err(CoreError::Connection(format!(
                     "max sandbox limit reached ({})",
                     self.config.max_sandboxes
                 )));
             }
+            tracing::trace!(
+                current,
+                max = self.config.max_sandboxes,
+                "Sandbox limit check passed"
+            );
         }
 
         // Assign a unique CID to prevent vsock collisions
         let mut config = config;
         config.vsock_cid = self.cid_counter.fetch_add(1, Ordering::Relaxed);
+        tracing::debug!(vsock_cid = config.vsock_cid, "Assigned CID");
 
         let sandbox = Sandbox::create(config).await?;
         let id = sandbox.id();
 
         let mut sandboxes = self.sandboxes.write().await;
         sandboxes.insert(id, sandbox);
+        let count = sandboxes.len();
+        drop(sandboxes);
 
-        tracing::info!(sandbox_id = %id, "Sandbox registered");
+        tracing::info!(sandbox_id = %id, total_sandboxes = count, "Sandbox registered");
         Ok(id)
     }
 
@@ -119,6 +139,7 @@ impl SandboxManager {
     ///
     /// Uses the kernel and rootfs paths from the manager configuration.
     pub async fn create_default(&self) -> Result<SandboxId, CoreError> {
+        tracing::debug!("Creating sandbox with default configuration");
         let config = SandboxConfig::builder()
             .kernel(&self.config.kernel_path)
             .rootfs(&self.config.rootfs_path)
@@ -144,10 +165,18 @@ impl SandboxManager {
     ///
     /// Returns an error (with the sandbox) if max_sandboxes limit is reached.
     pub async fn register(&self, sandbox: Sandbox) -> Result<SandboxId, (CoreError, Sandbox)> {
+        tracing::debug!(sandbox_id = %sandbox.id(), "Registering external sandbox");
+
         // Check sandbox limit
         if self.config.max_sandboxes > 0 {
             let current = self.sandboxes.read().await.len();
             if current >= self.config.max_sandboxes {
+                tracing::warn!(
+                    sandbox_id = %sandbox.id(),
+                    current,
+                    max = self.config.max_sandboxes,
+                    "Max sandbox limit reached, rejecting registration"
+                );
                 return Err((
                     CoreError::Connection(format!(
                         "max sandbox limit reached ({})",
@@ -161,8 +190,10 @@ impl SandboxManager {
         let id = sandbox.id();
         let mut sandboxes = self.sandboxes.write().await;
         sandboxes.insert(id, sandbox);
+        let count = sandboxes.len();
+        drop(sandboxes);
 
-        tracing::info!(sandbox_id = %id, "Sandbox registered from pool");
+        tracing::info!(sandbox_id = %id, total_sandboxes = count, "Sandbox registered from pool");
         Ok(id)
     }
 
@@ -224,9 +255,16 @@ impl SandboxManager {
     ///
     /// This removes the sandbox from the registry and releases all resources.
     pub async fn destroy(&self, id: SandboxId) -> Result<(), CoreError> {
+        tracing::debug!(sandbox_id = %id, "Destroying sandbox");
         let sandbox = {
             let mut sandboxes = self.sandboxes.write().await;
-            sandboxes.remove(&id).ok_or(CoreError::NotFound(id))?
+            match sandboxes.remove(&id) {
+                Some(s) => s,
+                None => {
+                    tracing::warn!(sandbox_id = %id, "Sandbox not found for destruction");
+                    return Err(CoreError::NotFound(id));
+                }
+            }
         };
         sandbox.destroy().await
     }
@@ -279,6 +317,7 @@ impl SandboxManager {
         id: SandboxId,
         command: &str,
     ) -> Result<crate::ExecResult, CoreError> {
+        tracing::debug!(sandbox_id = %id, cmd = %command, "Manager: execute");
         let sandboxes = self.sandboxes.read().await;
         let sandbox = sandboxes.get(&id).ok_or(CoreError::NotFound(id))?;
         sandbox.execute(command).await
@@ -293,6 +332,7 @@ impl SandboxManager {
         language: &str,
         code: &str,
     ) -> Result<crate::ExecResult, CoreError> {
+        tracing::debug!(sandbox_id = %id, lang = %language, code_len = code.len(), "Manager: execute_code");
         let sandboxes = self.sandboxes.read().await;
         let sandbox = sandboxes.get(&id).ok_or(CoreError::NotFound(id))?;
         sandbox.execute_code(language, code).await
@@ -300,6 +340,7 @@ impl SandboxManager {
 
     /// Read a file from a sandbox.
     pub async fn read_file(&self, id: SandboxId, path: &str) -> Result<String, CoreError> {
+        tracing::debug!(sandbox_id = %id, path = %path, "Manager: read_file");
         let sandboxes = self.sandboxes.read().await;
         let sandbox = sandboxes.get(&id).ok_or(CoreError::NotFound(id))?;
         sandbox.read_file(path).await
@@ -312,6 +353,7 @@ impl SandboxManager {
         path: &str,
         content: &str,
     ) -> Result<(), CoreError> {
+        tracing::debug!(sandbox_id = %id, path = %path, content_len = content.len(), "Manager: write_file");
         let sandboxes = self.sandboxes.read().await;
         let sandbox = sandboxes.get(&id).ok_or(CoreError::NotFound(id))?;
         sandbox.write_file(path, content).await
@@ -323,6 +365,7 @@ impl SandboxManager {
         id: SandboxId,
         path: &str,
     ) -> Result<Vec<crate::FileEntry>, CoreError> {
+        tracing::debug!(sandbox_id = %id, path = %path, "Manager: list_dir");
         let sandboxes = self.sandboxes.read().await;
         let sandbox = sandboxes.get(&id).ok_or(CoreError::NotFound(id))?;
         sandbox.list_dir(path).await

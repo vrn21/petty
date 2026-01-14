@@ -49,16 +49,33 @@ impl AgentClient {
     /// Returns an error if the connection cannot be established within the timeout.
     pub async fn connect(vsock_path: &Path) -> Result<Self, CoreError> {
         let start = std::time::Instant::now();
+        tracing::debug!(path = %vsock_path.display(), "Connecting to agent");
 
         // Retry loop: agent may not be ready immediately after VM boot
+        let mut attempts = 0u32;
         loop {
+            attempts += 1;
             match Self::try_connect(vsock_path).await {
-                Ok(client) => return Ok(client),
+                Ok(client) => {
+                    tracing::info!(
+                        path = %vsock_path.display(),
+                        elapsed_ms = start.elapsed().as_millis() as u64,
+                        attempts,
+                        "Connected to agent"
+                    );
+                    return Ok(client);
+                }
                 Err(e) => {
                     if start.elapsed() >= CONNECT_TIMEOUT {
+                        tracing::warn!(
+                            path = %vsock_path.display(),
+                            elapsed_ms = start.elapsed().as_millis() as u64,
+                            attempts,
+                            "Agent connection timeout"
+                        );
                         return Err(CoreError::AgentTimeout(CONNECT_TIMEOUT));
                     }
-                    tracing::debug!(error = %e, "Connection attempt failed, retrying...");
+                    tracing::trace!(error = %e, attempt = attempts, "Connection attempt failed, retrying...");
                     tokio::time::sleep(RETRY_INTERVAL).await;
                 }
             }
@@ -68,6 +85,7 @@ impl AgentClient {
     /// Attempt a single connection to the vsock socket.
     async fn try_connect(vsock_path: &Path) -> Result<Self, CoreError> {
         // 1. Connect to the Unix socket
+        tracing::trace!(path = %vsock_path.display(), "Attempting socket connection");
         let stream = UnixStream::connect(vsock_path)
             .await
             .map_err(|e| CoreError::Connection(format!("socket connect failed: {e}")))?;
@@ -77,6 +95,7 @@ impl AgentClient {
         let mut writer = BufWriter::new(write_half);
 
         // 2. Send CONNECT handshake
+        tracing::trace!(port = GUEST_PORT, "Sending CONNECT handshake");
         writer
             .write_all(format!("CONNECT {GUEST_PORT}\n").as_bytes())
             .await
@@ -88,6 +107,7 @@ impl AgentClient {
         reader.read_line(&mut response).await?;
 
         if !response.starts_with("OK ") {
+            tracing::debug!(response = %response.trim(), "Handshake failed");
             return Err(CoreError::Connection(format!(
                 "handshake failed: {}",
                 response.trim()
@@ -131,7 +151,8 @@ impl AgentClient {
 
         // Send request (newline-delimited)
         let request_str = serde_json::to_string(&request)?;
-        tracing::trace!(method = %method, request = %request_str, "Sending RPC request");
+        tracing::debug!(method = %method, id, "Sending RPC request");
+        tracing::trace!(request = %request_str, "RPC request body");
 
         self.writer.write_all(request_str.as_bytes()).await?;
         self.writer.write_all(b"\n").await?;
@@ -139,14 +160,22 @@ impl AgentClient {
 
         // Read response with timeout
         let mut response_str = String::new();
-        timeout(RPC_TIMEOUT, self.reader.read_line(&mut response_str))
-            .await
-            .map_err(|_| CoreError::Rpc {
-                code: -1,
-                message: "response timeout".into(),
-            })??;
+        match timeout(RPC_TIMEOUT, self.reader.read_line(&mut response_str)).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => {
+                tracing::warn!(method = %method, id, error = %e, "RPC read error");
+                return Err(e.into());
+            }
+            Err(_) => {
+                tracing::warn!(method = %method, id, timeout_secs = RPC_TIMEOUT.as_secs(), "RPC response timeout");
+                return Err(CoreError::Rpc {
+                    code: -1,
+                    message: "response timeout".into(),
+                });
+            }
+        }
 
-        tracing::trace!(response = %response_str.trim(), "Received RPC response");
+        tracing::trace!(response = %response_str.trim(), "RPC response body");
 
         // Parse response
         let response: serde_json::Value = serde_json::from_str(&response_str)?;
@@ -159,6 +188,7 @@ impl AgentClient {
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown error")
                 .to_string();
+            tracing::debug!(method = %method, id, code, message = %message, "RPC error response");
             return Err(CoreError::Rpc { code, message });
         }
 
@@ -171,6 +201,7 @@ impl AgentClient {
                 message: "missing result in response".into(),
             })?;
 
+        tracing::debug!(method = %method, id, "RPC call successful");
         serde_json::from_value(result).map_err(CoreError::from)
     }
 
@@ -182,6 +213,7 @@ impl AgentClient {
 
     /// Execute a shell command.
     pub async fn exec(&mut self, cmd: &str) -> Result<ExecResult, CoreError> {
+        tracing::debug!(cmd = %cmd, "Executing command via agent");
         self.call("exec", serde_json::json!({ "cmd": cmd })).await
     }
 
@@ -192,6 +224,7 @@ impl AgentClient {
     /// * `lang` - Language identifier (python, python3, node, javascript, bash, sh)
     /// * `code` - Code to execute
     pub async fn exec_code(&mut self, lang: &str, code: &str) -> Result<ExecResult, CoreError> {
+        tracing::debug!(lang = %lang, code_len = code.len(), "Executing code via agent");
         self.call(
             "exec_code",
             serde_json::json!({ "lang": lang, "code": code }),
@@ -201,6 +234,7 @@ impl AgentClient {
 
     /// Read a file from the guest filesystem.
     pub async fn read_file(&mut self, path: &str) -> Result<String, CoreError> {
+        tracing::debug!(path = %path, "Reading file from guest");
         let resp: ReadFileResponse = self
             .call("read_file", serde_json::json!({ "path": path }))
             .await?;
@@ -209,6 +243,7 @@ impl AgentClient {
 
     /// Write a file to the guest filesystem.
     pub async fn write_file(&mut self, path: &str, content: &str) -> Result<(), CoreError> {
+        tracing::debug!(path = %path, content_len = content.len(), "Writing file to guest");
         let _: WriteFileResponse = self
             .call(
                 "write_file",
@@ -220,9 +255,11 @@ impl AgentClient {
 
     /// List directory contents.
     pub async fn list_dir(&mut self, path: &str) -> Result<Vec<FileEntry>, CoreError> {
+        tracing::debug!(path = %path, "Listing directory on guest");
         let resp: ListDirResponse = self
             .call("list_dir", serde_json::json!({ "path": path }))
             .await?;
+        tracing::trace!(count = resp.entries.len(), "Directory entries received");
         Ok(resp.entries)
     }
 }

@@ -5,6 +5,7 @@
 use crate::protocol::FileEntry;
 use std::fs;
 use std::path::Path;
+use tracing::{debug, trace, warn};
 
 /// Maximum file size for read_file (10 MB).
 /// Prevents memory exhaustion from reading huge files.
@@ -19,10 +20,16 @@ const MAX_READ_SIZE: u64 = 10 * 1024 * 1024;
 /// The file contents as a string, or an error message.
 /// Files larger than 10MB will be rejected.
 pub fn read_file(path: &str) -> Result<String, String> {
+    debug!(path = %path, "reading file");
+
     // Check file size first
-    let metadata = fs::metadata(path).map_err(|e| format!("failed to stat '{}': {}", path, e))?;
+    let metadata = fs::metadata(path).map_err(|e| {
+        warn!(path = %path, error = %e, "failed to stat file");
+        format!("failed to stat '{}': {}", path, e)
+    })?;
 
     if metadata.len() > MAX_READ_SIZE {
+        warn!(path = %path, size = metadata.len(), max = MAX_READ_SIZE, "file too large");
         return Err(format!(
             "file '{}' is too large ({} bytes, max {} bytes)",
             path,
@@ -31,7 +38,14 @@ pub fn read_file(path: &str) -> Result<String, String> {
         ));
     }
 
-    fs::read_to_string(path).map_err(|e| format!("failed to read '{}': {}", path, e))
+    let content = fs::read_to_string(path).map_err(|e| {
+        warn!(path = %path, error = %e, "failed to read file");
+        format!("failed to read '{}': {}", path, e)
+    })?;
+
+    debug!(path = %path, size = content.len(), "file read successfully");
+    trace!(content = %content, "file content");
+    Ok(content)
 }
 
 /// Write content to a file.
@@ -45,17 +59,29 @@ pub fn read_file(path: &str) -> Result<String, String> {
 /// # Returns
 /// `true` on success, or an error message.
 pub fn write_file(path: &str, content: &str) -> Result<bool, String> {
+    debug!(path = %path, content_len = content.len(), "writing file");
+    trace!(content = %content, "content to write");
+
     // Create parent directories if needed
     if let Some(parent) = Path::new(path).parent() {
         if !parent.exists() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("failed to create directories for '{}': {}", path, e))?;
+            debug!(parent = %parent.display(), "creating parent directories");
+            fs::create_dir_all(parent).map_err(|e| {
+                warn!(path = %path, error = %e, "failed to create directories");
+                format!("failed to create directories for '{}': {}", path, e)
+            })?;
         }
     }
 
     fs::write(path, content)
-        .map(|_| true)
-        .map_err(|e| format!("failed to write '{}': {}", path, e))
+        .map(|_| {
+            debug!(path = %path, "file written successfully");
+            true
+        })
+        .map_err(|e| {
+            warn!(path = %path, error = %e, "failed to write file");
+            format!("failed to write '{}': {}", path, e)
+        })
 }
 
 /// List contents of a directory.
@@ -66,18 +92,27 @@ pub fn write_file(path: &str, content: &str) -> Result<bool, String> {
 /// # Returns
 /// A vector of `FileEntry` items, or an error message.
 pub fn list_dir(path: &str) -> Result<Vec<FileEntry>, String> {
-    let entries =
-        fs::read_dir(path).map_err(|e| format!("failed to read directory '{}': {}", path, e))?;
+    debug!(path = %path, "listing directory");
+
+    let entries = fs::read_dir(path).map_err(|e| {
+        warn!(path = %path, error = %e, "failed to read directory");
+        format!("failed to read directory '{}': {}", path, e)
+    })?;
 
     let mut result = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|e| format!("failed to read entry: {}", e))?;
+        let entry = entry.map_err(|e| {
+            warn!(error = %e, "failed to read directory entry");
+            format!("failed to read entry: {}", e)
+        })?;
 
-        let metadata = entry
-            .metadata()
-            .map_err(|e| format!("failed to get metadata: {}", e))?;
+        let metadata = entry.metadata().map_err(|e| {
+            warn!(error = %e, "failed to get entry metadata");
+            format!("failed to get metadata: {}", e)
+        })?;
 
         let name = entry.file_name().to_string_lossy().into_owned();
+        trace!(name = %name, is_dir = metadata.is_dir(), "found entry");
 
         result.push(FileEntry {
             name,
@@ -93,6 +128,7 @@ pub fn list_dir(path: &str) -> Result<Vec<FileEntry>, String> {
     // Sort by name for consistent output
     result.sort_by(|a, b| a.name.cmp(&b.name));
 
+    debug!(path = %path, count = result.len(), "directory listed successfully");
     Ok(result)
 }
 

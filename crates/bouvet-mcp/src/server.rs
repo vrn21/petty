@@ -36,6 +36,13 @@ pub struct BouvetServer {
 impl BouvetServer {
     /// Create a new BouvetServer with the given configuration.
     pub fn new(config: BouvetConfig) -> Self {
+        tracing::info!(
+            kernel = %config.kernel_path.display(),
+            rootfs = %config.rootfs_path.display(),
+            firecracker = %config.firecracker_path.display(),
+            "Creating BouvetServer"
+        );
+
         let manager_config = ManagerConfig::new(
             &config.kernel_path,
             &config.rootfs_path,
@@ -69,6 +76,7 @@ impl BouvetServer {
             None
         };
 
+        tracing::debug!("BouvetServer created");
         Self {
             manager,
             config,
@@ -91,8 +99,11 @@ impl BouvetServer {
     /// Call this before stopping the server to clean up pooled sandboxes.
     pub async fn shutdown_pool(&self) {
         if let Some(pool) = &self.pool {
+            tracing::info!("Shutting down warm pool");
             if let Err(e) = pool.lock().await.shutdown().await {
                 tracing::error!(error = %e, "Pool shutdown failed");
+            } else {
+                tracing::debug!("Pool shutdown complete");
             }
         }
     }
@@ -191,10 +202,16 @@ impl BouvetServer {
             .and_then(|a| serde_json::from_value(serde_json::Value::Object(a)).ok())
             .unwrap_or_default();
 
-        tracing::info!("Creating sandbox with params: {:?}", params);
+        let start = std::time::Instant::now();
+        tracing::info!(
+            memory_mib = params.memory_mib,
+            vcpu_count = params.vcpu_count,
+            "Tool: create_sandbox"
+        );
 
         // Try to acquire from warm pool first
         if let Some(pool) = &self.pool {
+            tracing::debug!("Attempting to acquire from warm pool");
             let acquire_result = {
                 let pool_guard = pool.lock().await;
                 pool_guard.acquire().await
@@ -205,7 +222,12 @@ impl BouvetServer {
                     // Register the pooled sandbox with manager for lifecycle tracking
                     match self.manager.register(sandbox).await {
                         Ok(id) => {
-                            tracing::info!(sandbox_id = %id, "Acquired sandbox from warm pool");
+                            tracing::info!(
+                                sandbox_id = %id,
+                                elapsed_ms = start.elapsed().as_millis() as u64,
+                                source = "pool",
+                                "Sandbox created"
+                            );
                             return Self::json_result(&CreateSandboxResult {
                                 sandbox_id: id.to_string(),
                             });
@@ -221,12 +243,13 @@ impl BouvetServer {
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "Pool acquire failed, falling back to cold-start");
+                    tracing::debug!(error = %e, "Pool acquire failed, falling back to cold-start");
                 }
             }
         }
 
         // Fallback: cold-start path (original behavior)
+        tracing::debug!("Creating sandbox via cold-start");
         let mut config_builder = SandboxConfig::builder()
             .kernel(&self.config.kernel_path)
             .rootfs(&self.config.rootfs_path);
@@ -241,18 +264,26 @@ impl BouvetServer {
 
         let sandbox_config = match config_builder.build() {
             Ok(c) => c,
-            Err(e) => return Self::error_result(format!("Invalid sandbox configuration: {e}")),
+            Err(e) => {
+                tracing::warn!(error = %e, "Invalid sandbox configuration");
+                return Self::error_result(format!("Invalid sandbox configuration: {e}"));
+            }
         };
 
         match self.manager.create(sandbox_config).await {
             Ok(id) => {
-                tracing::info!(sandbox_id = %id, "Created sandbox via cold-start");
+                tracing::info!(
+                    sandbox_id = %id,
+                    elapsed_ms = start.elapsed().as_millis() as u64,
+                    source = "cold-start",
+                    "Sandbox created"
+                );
                 Self::json_result(&CreateSandboxResult {
                     sandbox_id: id.to_string(),
                 })
             }
             Err(e) => {
-                tracing::error!("Failed to create sandbox: {e}");
+                tracing::error!(error = %e, "Failed to create sandbox");
                 Self::error_result(format!("Failed to create sandbox: {e}"))
             }
         }
@@ -267,32 +298,45 @@ impl BouvetServer {
             .transpose()
         {
             Ok(Some(p)) => p,
-            _ => return Self::error_result("Missing required parameter: sandbox_id"),
+            _ => {
+                tracing::warn!("destroy_sandbox called without sandbox_id");
+                return Self::error_result("Missing required parameter: sandbox_id");
+            }
         };
 
-        tracing::info!("Destroying sandbox: {}", params.sandbox_id);
+        let start = std::time::Instant::now();
+        tracing::info!(sandbox_id = %params.sandbox_id, "Tool: destroy_sandbox");
 
         let id = match Self::parse_sandbox_id(&params.sandbox_id) {
             Ok(id) => id,
-            Err(e) => return Self::error_result(e),
+            Err(e) => {
+                tracing::debug!(sandbox_id = %params.sandbox_id, "Invalid sandbox ID");
+                return Self::error_result(e);
+            }
         };
 
         match self.manager.destroy(id).await {
             Ok(()) => {
-                tracing::info!("Destroyed sandbox: {id}");
+                tracing::info!(
+                    sandbox_id = %id,
+                    elapsed_ms = start.elapsed().as_millis() as u64,
+                    "Sandbox destroyed"
+                );
                 Self::json_result(&DestroySandboxResult { success: true })
             }
             Err(e) => {
-                tracing::error!("Failed to destroy sandbox {id}: {e}");
+                tracing::error!(sandbox_id = %id, error = %e, "Failed to destroy sandbox");
                 Self::error_result(format!("Failed to destroy sandbox: {e}"))
             }
         }
     }
 
     async fn handle_list_sandboxes(&self) -> CallToolResult {
-        tracing::debug!("Listing sandboxes");
+        tracing::debug!("Tool: list_sandboxes");
 
         let ids = self.manager.list().await;
+        tracing::trace!(count = ids.len(), "Found sandboxes");
+
         let mut sandboxes = Vec::with_capacity(ids.len());
 
         for id in ids {
@@ -309,6 +353,7 @@ impl BouvetServer {
             }
         }
 
+        tracing::debug!(count = sandboxes.len(), "Listed sandboxes");
         Self::json_result(&ListSandboxesResult { sandboxes })
     }
 
@@ -322,28 +367,34 @@ impl BouvetServer {
         {
             Ok(Some(p)) => p,
             _ => {
+                tracing::warn!("execute_code called without required parameters");
                 return Self::error_result(
                     "Missing required parameters: sandbox_id, language, code",
-                )
+                );
             }
         };
 
         // Validate input sizes
         if let Err(e) = Self::validate_size(&params.code, MAX_INPUT_SIZE_BYTES, "code") {
+            tracing::warn!(sandbox_id = %params.sandbox_id, error = %e, "Code size validation failed");
             return Self::error_result(e);
         }
 
-        // Log with truncated content for security
+        let start = std::time::Instant::now();
         tracing::info!(
-            "Executing {} code in sandbox: {} (code: {})",
-            params.language,
-            params.sandbox_id,
-            Self::truncate_for_log(&params.code, 100)
+            sandbox_id = %params.sandbox_id,
+            language = %params.language,
+            code_len = params.code.len(),
+            "Tool: execute_code"
         );
+        tracing::trace!(code_preview = %Self::truncate_for_log(&params.code, 200), "Code content");
 
         let id = match Self::parse_sandbox_id(&params.sandbox_id) {
             Ok(id) => id,
-            Err(e) => return Self::error_result(e),
+            Err(e) => {
+                tracing::debug!(sandbox_id = %params.sandbox_id, "Invalid sandbox ID");
+                return Self::error_result(e);
+            }
         };
 
         // Use the new direct execute_code method
@@ -352,12 +403,28 @@ impl BouvetServer {
             .execute_code(id, &params.language, &params.code)
             .await
         {
-            Ok(result) => Self::json_result(&ExecResponse {
-                exit_code: result.exit_code,
-                stdout: result.stdout,
-                stderr: result.stderr,
-            }),
-            Err(e) => Self::error_result(format!("Execution failed: {e}")),
+            Ok(result) => {
+                tracing::info!(
+                    sandbox_id = %id,
+                    exit_code = result.exit_code,
+                    elapsed_ms = start.elapsed().as_millis() as u64,
+                    "Code execution completed"
+                );
+                tracing::trace!(
+                    stdout_len = result.stdout.len(),
+                    stderr_len = result.stderr.len(),
+                    "Execution output"
+                );
+                Self::json_result(&ExecResponse {
+                    exit_code: result.exit_code,
+                    stdout: result.stdout,
+                    stderr: result.stderr,
+                })
+            }
+            Err(e) => {
+                tracing::error!(sandbox_id = %id, error = %e, "Code execution failed");
+                Self::error_result(format!("Execution failed: {e}"))
+            }
         }
     }
 
@@ -370,34 +437,58 @@ impl BouvetServer {
             .transpose()
         {
             Ok(Some(p)) => p,
-            _ => return Self::error_result("Missing required parameters: sandbox_id, command"),
+            _ => {
+                tracing::warn!("run_command called without required parameters");
+                return Self::error_result("Missing required parameters: sandbox_id, command");
+            }
         };
 
         // Validate command length
         if let Err(e) = Self::validate_size(&params.command, MAX_COMMAND_LENGTH, "command") {
+            tracing::warn!(sandbox_id = %params.sandbox_id, error = %e, "Command size validation failed");
             return Self::error_result(e);
         }
 
-        // Log with truncated content for security
+        let start = std::time::Instant::now();
         tracing::info!(
-            "Running command in sandbox {}: {}",
-            params.sandbox_id,
-            Self::truncate_for_log(&params.command, 100)
+            sandbox_id = %params.sandbox_id,
+            cmd_len = params.command.len(),
+            "Tool: run_command"
         );
+        tracing::trace!(cmd = %Self::truncate_for_log(&params.command, 200), "Command content");
 
         let id = match Self::parse_sandbox_id(&params.sandbox_id) {
             Ok(id) => id,
-            Err(e) => return Self::error_result(e),
+            Err(e) => {
+                tracing::debug!(sandbox_id = %params.sandbox_id, "Invalid sandbox ID");
+                return Self::error_result(e);
+            }
         };
 
         // Use the new direct execute method
         match self.manager.execute(id, &params.command).await {
-            Ok(result) => Self::json_result(&ExecResponse {
-                exit_code: result.exit_code,
-                stdout: result.stdout,
-                stderr: result.stderr,
-            }),
-            Err(e) => Self::error_result(format!("Execution failed: {e}")),
+            Ok(result) => {
+                tracing::info!(
+                    sandbox_id = %id,
+                    exit_code = result.exit_code,
+                    elapsed_ms = start.elapsed().as_millis() as u64,
+                    "Command completed"
+                );
+                tracing::trace!(
+                    stdout_len = result.stdout.len(),
+                    stderr_len = result.stderr.len(),
+                    "Command output"
+                );
+                Self::json_result(&ExecResponse {
+                    exit_code: result.exit_code,
+                    stdout: result.stdout,
+                    stderr: result.stderr,
+                })
+            }
+            Err(e) => {
+                tracing::error!(sandbox_id = %id, error = %e, "Command execution failed");
+                Self::error_result(format!("Execution failed: {e}"))
+            }
         }
     }
 
@@ -410,17 +501,40 @@ impl BouvetServer {
             .transpose()
         {
             Ok(Some(p)) => p,
-            _ => return Self::error_result("Missing required parameters: sandbox_id, path"),
+            _ => {
+                tracing::warn!("read_file called without required parameters");
+                return Self::error_result("Missing required parameters: sandbox_id, path");
+            }
         };
+
+        tracing::info!(
+            sandbox_id = %params.sandbox_id,
+            path = %params.path,
+            "Tool: read_file"
+        );
 
         let id = match Self::parse_sandbox_id(&params.sandbox_id) {
             Ok(id) => id,
-            Err(e) => return Self::error_result(e),
+            Err(e) => {
+                tracing::debug!(sandbox_id = %params.sandbox_id, "Invalid sandbox ID");
+                return Self::error_result(e);
+            }
         };
 
         match self.manager.read_file(id, &params.path).await {
-            Ok(content) => Self::json_result(&ReadFileResult { content }),
-            Err(e) => Self::error_result(format!("Failed to read file: {e}")),
+            Ok(content) => {
+                tracing::debug!(
+                    sandbox_id = %id,
+                    path = %params.path,
+                    size = content.len(),
+                    "File read successfully"
+                );
+                Self::json_result(&ReadFileResult { content })
+            }
+            Err(e) => {
+                tracing::warn!(sandbox_id = %id, path = %params.path, error = %e, "Failed to read file");
+                Self::error_result(format!("Failed to read file: {e}"))
+            }
         }
     }
 
@@ -434,25 +548,32 @@ impl BouvetServer {
         {
             Ok(Some(p)) => p,
             _ => {
-                return Self::error_result("Missing required parameters: sandbox_id, path, content")
+                tracing::warn!("write_file called without required parameters");
+                return Self::error_result(
+                    "Missing required parameters: sandbox_id, path, content",
+                );
             }
         };
 
         // Validate content size
         if let Err(e) = Self::validate_size(&params.content, MAX_INPUT_SIZE_BYTES, "content") {
+            tracing::warn!(sandbox_id = %params.sandbox_id, error = %e, "Content size validation failed");
             return Self::error_result(e);
         }
 
         tracing::info!(
-            "Writing file in sandbox {}: {} ({} bytes)",
-            params.sandbox_id,
-            params.path,
-            params.content.len()
+            sandbox_id = %params.sandbox_id,
+            path = %params.path,
+            content_len = params.content.len(),
+            "Tool: write_file"
         );
 
         let id = match Self::parse_sandbox_id(&params.sandbox_id) {
             Ok(id) => id,
-            Err(e) => return Self::error_result(e),
+            Err(e) => {
+                tracing::debug!(sandbox_id = %params.sandbox_id, "Invalid sandbox ID");
+                return Self::error_result(e);
+            }
         };
 
         match self
@@ -460,8 +581,18 @@ impl BouvetServer {
             .write_file(id, &params.path, &params.content)
             .await
         {
-            Ok(()) => Self::json_result(&WriteFileResult { success: true }),
-            Err(e) => Self::error_result(format!("Failed to write file: {e}")),
+            Ok(()) => {
+                tracing::debug!(
+                    sandbox_id = %id,
+                    path = %params.path,
+                    "File written successfully"
+                );
+                Self::json_result(&WriteFileResult { success: true })
+            }
+            Err(e) => {
+                tracing::warn!(sandbox_id = %id, path = %params.path, error = %e, "Failed to write file");
+                Self::error_result(format!("Failed to write file: {e}"))
+            }
         }
     }
 
@@ -474,16 +605,29 @@ impl BouvetServer {
             .transpose()
         {
             Ok(Some(p)) => p,
-            _ => return Self::error_result("Missing required parameters: sandbox_id, path"),
+            _ => {
+                tracing::warn!("list_directory called without required parameters");
+                return Self::error_result("Missing required parameters: sandbox_id, path");
+            }
         };
+
+        tracing::info!(
+            sandbox_id = %params.sandbox_id,
+            path = %params.path,
+            "Tool: list_directory"
+        );
 
         let id = match Self::parse_sandbox_id(&params.sandbox_id) {
             Ok(id) => id,
-            Err(e) => return Self::error_result(e),
+            Err(e) => {
+                tracing::debug!(sandbox_id = %params.sandbox_id, "Invalid sandbox ID");
+                return Self::error_result(e);
+            }
         };
 
         match self.manager.list_dir(id, &params.path).await {
             Ok(entries) => {
+                let count = entries.len();
                 let entries: Vec<FileEntryResponse> = entries
                     .into_iter()
                     .map(|e| FileEntryResponse {
@@ -492,9 +636,18 @@ impl BouvetServer {
                         size: e.size,
                     })
                     .collect();
+                tracing::debug!(
+                    sandbox_id = %id,
+                    path = %params.path,
+                    count,
+                    "Directory listed"
+                );
                 Self::json_result(&ListDirectoryResult { entries })
             }
-            Err(e) => Self::error_result(format!("Failed to list directory: {e}")),
+            Err(e) => {
+                tracing::warn!(sandbox_id = %id, path = %params.path, error = %e, "Failed to list directory");
+                Self::error_result(format!("Failed to list directory: {e}"))
+            }
         }
     }
 
@@ -582,7 +735,10 @@ impl ServerHandler for BouvetServer {
         request: CallToolRequestParam,
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        let result = match request.name.as_ref() {
+        let tool_name = request.name.as_ref();
+        tracing::debug!(tool = tool_name, "MCP tool invocation");
+
+        let result = match tool_name {
             "create_sandbox" => self.handle_create_sandbox(request.arguments).await,
             "destroy_sandbox" => self.handle_destroy_sandbox(request.arguments).await,
             "list_sandboxes" => self.handle_list_sandboxes().await,
@@ -591,7 +747,10 @@ impl ServerHandler for BouvetServer {
             "read_file" => self.handle_read_file(request.arguments).await,
             "write_file" => self.handle_write_file(request.arguments).await,
             "list_directory" => self.handle_list_directory(request.arguments).await,
-            _ => Self::error_result(format!("Unknown tool: {}", request.name)),
+            _ => {
+                tracing::warn!(tool = tool_name, "Unknown tool invoked");
+                Self::error_result(format!("Unknown tool: {}", request.name))
+            }
         };
 
         Ok(result)

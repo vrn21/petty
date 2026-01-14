@@ -9,7 +9,7 @@ use crate::protocol::{
     WriteFileParams,
 };
 use serde_json::{json, Value};
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 /// Handle a JSON-RPC request and return a response.
 ///
@@ -22,9 +22,13 @@ use tracing::{debug, warn};
 /// - `list_dir` - List directory contents.
 pub fn handle_request(req: Request) -> Response {
     debug!(method = %req.method, id = req.id, "handling request");
+    trace!(params = ?req.params, "request params");
 
-    match req.method.as_str() {
-        "ping" => Response::success(req.id, json!({"pong": true})),
+    let response = match req.method.as_str() {
+        "ping" => {
+            debug!(id = req.id, "ping request");
+            Response::success(req.id, json!({"pong": true}))
+        }
 
         "exec" => handle_exec(req.id, req.params),
 
@@ -44,24 +48,37 @@ pub fn handle_request(req: Request) -> Response {
                 format!("method not found: {}", req.method),
             )
         }
+    };
+
+    if response.error.is_some() {
+        debug!(id = req.id, error = ?response.error, "request failed");
+    } else {
+        debug!(id = req.id, "request succeeded");
+        trace!(result = ?response.result, "response result");
     }
+
+    response
 }
 
 /// Handle the `exec` method.
 fn handle_exec(id: u64, params: Value) -> Response {
     match serde_json::from_value::<ExecParams>(params) {
         Ok(p) => {
+            debug!(id = id, cmd = %p.cmd, "handling exec");
             let result = exec_command(&p.cmd);
             match serde_json::to_value(&result) {
                 Ok(v) => Response::success(id, v),
                 Err(e) => Response::error(id, error_codes::INTERNAL_ERROR, e.to_string()),
             }
         }
-        Err(e) => Response::error(
-            id,
-            error_codes::INVALID_PARAMS,
-            format!("invalid params: {}", e),
-        ),
+        Err(e) => {
+            warn!(id = id, error = %e, "invalid exec params");
+            Response::error(
+                id,
+                error_codes::INVALID_PARAMS,
+                format!("invalid params: {}", e),
+            )
+        }
     }
 }
 
@@ -69,62 +86,84 @@ fn handle_exec(id: u64, params: Value) -> Response {
 fn handle_exec_code(id: u64, params: Value) -> Response {
     match serde_json::from_value::<ExecCodeParams>(params) {
         Ok(p) => {
+            debug!(id = id, lang = %p.lang, code_len = p.code.len(), "handling exec_code");
             let result = exec_code(&p.lang, &p.code);
             match serde_json::to_value(&result) {
                 Ok(v) => Response::success(id, v),
                 Err(e) => Response::error(id, error_codes::INTERNAL_ERROR, e.to_string()),
             }
         }
-        Err(e) => Response::error(
-            id,
-            error_codes::INVALID_PARAMS,
-            format!("invalid params: {}", e),
-        ),
+        Err(e) => {
+            warn!(id = id, error = %e, "invalid exec_code params");
+            Response::error(
+                id,
+                error_codes::INVALID_PARAMS,
+                format!("invalid params: {}", e),
+            )
+        }
     }
 }
 
 /// Handle the `read_file` method.
 fn handle_read_file(id: u64, params: Value) -> Response {
     match serde_json::from_value::<ReadFileParams>(params) {
-        Ok(p) => match read_file(&p.path) {
-            Ok(content) => Response::success(id, json!({"content": content})),
-            Err(e) => Response::error(id, error_codes::INTERNAL_ERROR, e),
-        },
-        Err(e) => Response::error(
-            id,
-            error_codes::INVALID_PARAMS,
-            format!("invalid params: {}", e),
-        ),
+        Ok(p) => {
+            debug!(id = id, path = %p.path, "handling read_file");
+            match read_file(&p.path) {
+                Ok(content) => Response::success(id, json!({"content": content})),
+                Err(e) => Response::error(id, error_codes::INTERNAL_ERROR, e),
+            }
+        }
+        Err(e) => {
+            warn!(id = id, error = %e, "invalid read_file params");
+            Response::error(
+                id,
+                error_codes::INVALID_PARAMS,
+                format!("invalid params: {}", e),
+            )
+        }
     }
 }
 
 /// Handle the `write_file` method.
 fn handle_write_file(id: u64, params: Value) -> Response {
     match serde_json::from_value::<WriteFileParams>(params) {
-        Ok(p) => match write_file(&p.path, &p.content) {
-            Ok(success) => Response::success(id, json!({"success": success})),
-            Err(e) => Response::error(id, error_codes::INTERNAL_ERROR, e),
-        },
-        Err(e) => Response::error(
-            id,
-            error_codes::INVALID_PARAMS,
-            format!("invalid params: {}", e),
-        ),
+        Ok(p) => {
+            debug!(id = id, path = %p.path, content_len = p.content.len(), "handling write_file");
+            match write_file(&p.path, &p.content) {
+                Ok(success) => Response::success(id, json!({"success": success})),
+                Err(e) => Response::error(id, error_codes::INTERNAL_ERROR, e),
+            }
+        }
+        Err(e) => {
+            warn!(id = id, error = %e, "invalid write_file params");
+            Response::error(
+                id,
+                error_codes::INVALID_PARAMS,
+                format!("invalid params: {}", e),
+            )
+        }
     }
 }
 
 /// Handle the `list_dir` method.
 fn handle_list_dir(id: u64, params: Value) -> Response {
     match serde_json::from_value::<ListDirParams>(params) {
-        Ok(p) => match list_dir(&p.path) {
-            Ok(entries) => Response::success(id, json!({"entries": entries})),
-            Err(e) => Response::error(id, error_codes::INTERNAL_ERROR, e),
-        },
-        Err(e) => Response::error(
-            id,
-            error_codes::INVALID_PARAMS,
-            format!("invalid params: {}", e),
-        ),
+        Ok(p) => {
+            debug!(id = id, path = %p.path, "handling list_dir");
+            match list_dir(&p.path) {
+                Ok(entries) => Response::success(id, json!({"entries": entries})),
+                Err(e) => Response::error(id, error_codes::INTERNAL_ERROR, e),
+            }
+        }
+        Err(e) => {
+            warn!(id = id, error = %e, "invalid list_dir params");
+            Response::error(
+                id,
+                error_codes::INVALID_PARAMS,
+                format!("invalid params: {}", e),
+            )
+        }
     }
 }
 

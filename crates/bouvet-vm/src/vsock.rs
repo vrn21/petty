@@ -18,9 +18,11 @@ use std::path::Path;
 /// * `socket_path` - Path to the Firecracker API socket (e.g., `/tmp/bouvet/vm-1/firecracker.socket`)
 /// * `config` - vsock configuration with guest CID and UDS path
 pub async fn configure_vsock(socket_path: &Path, config: &VsockConfig) -> Result<()> {
+    let start = std::time::Instant::now();
     tracing::debug!(
         cid = config.guest_cid,
         uds_path = %config.uds_path.display(),
+        socket = %socket_path.display(),
         "Configuring vsock"
     );
 
@@ -31,6 +33,7 @@ pub async fn configure_vsock(socket_path: &Path, config: &VsockConfig) -> Result
 
     let body = serde_json::to_string(&vsock)
         .map_err(|e| VmError::Config(format!("failed to serialize vsock config: {e}")))?;
+    tracing::trace!(body = %body, "vsock request body");
 
     let uri: hyper::Uri = Uri::new(socket_path, "/vsock").into();
 
@@ -41,11 +44,12 @@ pub async fn configure_vsock(socket_path: &Path, config: &VsockConfig) -> Result
         .body(Body::from(body))
         .map_err(|e| VmError::Config(format!("failed to build vsock request: {e}")))?;
 
+    tracing::trace!("Sending PUT /vsock request");
     let client = Client::unix();
-    let response = client
-        .request(request)
-        .await
-        .map_err(|e| VmError::Firepilot(format!("vsock configuration request failed: {e}")))?;
+    let response = client.request(request).await.map_err(|e| {
+        tracing::error!(error = %e, "vsock configuration request failed");
+        VmError::Firepilot(format!("vsock configuration request failed: {e}"))
+    })?;
 
     let status = response.status();
     if !status.is_success() {
@@ -53,13 +57,19 @@ pub async fn configure_vsock(socket_path: &Path, config: &VsockConfig) -> Result
             .await
             .unwrap_or_default();
         let body_str = String::from_utf8_lossy(&body_bytes);
+        tracing::error!(status = %status, body = %body_str, "vsock configuration failed");
         return Err(VmError::Firepilot(format!(
             "vsock configuration failed with status {}: {}",
             status, body_str
         )));
     }
 
-    tracing::info!(cid = config.guest_cid, "vsock configured successfully");
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    tracing::info!(
+        cid = config.guest_cid,
+        elapsed_ms,
+        "vsock configured successfully"
+    );
     Ok(())
 }
 

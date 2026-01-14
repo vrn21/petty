@@ -4,6 +4,7 @@
 
 use crate::protocol::ExecResult;
 use std::process::Command;
+use tracing::{debug, trace, warn};
 
 /// Maximum output size in bytes (1 MB).
 /// Prevents memory exhaustion from commands with huge output.
@@ -33,21 +34,37 @@ fn truncate_output(s: String, max_bytes: usize) -> String {
 /// An `ExecResult` containing exit code, stdout, and stderr.
 /// Output is truncated to 1MB to prevent memory exhaustion.
 pub fn exec_command(cmd: &str) -> ExecResult {
+    debug!(cmd = %cmd, "executing shell command");
     let output = Command::new("sh").args(["-c", cmd]).output();
 
     match output {
-        Ok(out) => ExecResult {
-            exit_code: out.status.code().unwrap_or(-1),
-            stdout: truncate_output(
+        Ok(out) => {
+            let exit_code = out.status.code().unwrap_or(-1);
+            let stdout = truncate_output(
                 String::from_utf8_lossy(&out.stdout).into_owned(),
                 MAX_OUTPUT_SIZE,
-            ),
-            stderr: truncate_output(
+            );
+            let stderr = truncate_output(
                 String::from_utf8_lossy(&out.stderr).into_owned(),
                 MAX_OUTPUT_SIZE,
-            ),
-        },
-        Err(e) => ExecResult::error(&e.to_string()),
+            );
+            debug!(
+                exit_code = exit_code,
+                stdout_len = stdout.len(),
+                stderr_len = stderr.len(),
+                "command completed"
+            );
+            trace!(stdout = %stdout, stderr = %stderr, "command output");
+            ExecResult {
+                exit_code,
+                stdout,
+                stderr,
+            }
+        }
+        Err(e) => {
+            warn!(error = %e, cmd = %cmd, "command execution failed");
+            ExecResult::error(&e.to_string())
+        }
     }
 }
 
@@ -65,35 +82,55 @@ pub fn exec_command(cmd: &str) -> ExecResult {
 /// # Returns
 /// An `ExecResult` containing exit code, stdout, and stderr.
 pub fn exec_code(lang: &str, code: &str) -> ExecResult {
+    debug!(lang = %lang, code_len = code.len(), "executing code");
+    trace!(code = %code, "code to execute");
+
     let (program, args): (&str, Vec<&str>) = match lang.to_lowercase().as_str() {
         "python" | "python3" => ("python3", vec!["-c", code]),
         "node" | "javascript" | "js" => ("node", vec!["-e", code]),
         "bash" => ("bash", vec!["-c", code]),
         "sh" => ("sh", vec!["-c", code]),
         _ => {
+            warn!(lang = %lang, "unsupported language requested");
             return ExecResult::error(&format!("unsupported language: {}", lang));
         }
     };
 
+    debug!(program = %program, "using interpreter");
     let output = Command::new(program).args(&args).output();
 
     match output {
-        Ok(out) => ExecResult {
-            exit_code: out.status.code().unwrap_or(-1),
-            stdout: truncate_output(
+        Ok(out) => {
+            let exit_code = out.status.code().unwrap_or(-1);
+            let stdout = truncate_output(
                 String::from_utf8_lossy(&out.stdout).into_owned(),
                 MAX_OUTPUT_SIZE,
-            ),
-            stderr: truncate_output(
+            );
+            let stderr = truncate_output(
                 String::from_utf8_lossy(&out.stderr).into_owned(),
                 MAX_OUTPUT_SIZE,
-            ),
-        },
-        Err(e) => ExecResult {
-            exit_code: -1,
-            stdout: String::new(),
-            stderr: format!("failed to execute {}: {}", program, e),
-        },
+            );
+            debug!(
+                exit_code = exit_code,
+                stdout_len = stdout.len(),
+                stderr_len = stderr.len(),
+                "code execution completed"
+            );
+            trace!(stdout = %stdout, stderr = %stderr, "code output");
+            ExecResult {
+                exit_code,
+                stdout,
+                stderr,
+            }
+        }
+        Err(e) => {
+            warn!(error = %e, program = %program, "code execution failed");
+            ExecResult {
+                exit_code: -1,
+                stdout: String::new(),
+                stderr: format!("failed to execute {}: {}", program, e),
+            }
+        }
     }
 }
 

@@ -29,6 +29,8 @@ use tower_http::trace::TraceLayer;
 /// The returned router can be served directly with axum or composed
 /// into a larger application.
 pub fn build_router(server: BouvetServer) -> Router {
+    tracing::debug!("Building HTTP router");
+
     // Create session manager for handling MCP sessions
     let session_manager = Arc::new(LocalSessionManager::default());
 
@@ -40,7 +42,7 @@ pub fn build_router(server: BouvetServer) -> Router {
     );
 
     // Build the router
-    Router::new()
+    let router = Router::new()
         // Health check
         .route("/health", get(health_handler))
         // Server info at root
@@ -54,11 +56,15 @@ pub fn build_router(server: BouvetServer) -> Router {
                 .allow_methods(Any)
                 .allow_headers(Any),
         )
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http());
+
+    tracing::debug!("HTTP router built with routes: /, /health, /mcp");
+    router
 }
 
 /// Health check endpoint.
 async fn health_handler() -> impl IntoResponse {
+    tracing::trace!("Health check request");
     Json(serde_json::json!({
         "status": "healthy",
         "service": "bouvet-mcp"
@@ -67,6 +73,7 @@ async fn health_handler() -> impl IntoResponse {
 
 /// Root endpoint with server info.
 async fn root_handler() -> impl IntoResponse {
+    tracing::trace!("Root page request");
     Html(
         r#"<!DOCTYPE html>
 <html>
@@ -124,6 +131,7 @@ pub async fn serve(
     tracing::info!(%addr, "Starting HTTP/SSE server");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    tracing::debug!(%addr, "TCP listener bound");
 
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown)
