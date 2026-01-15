@@ -45,9 +45,20 @@ variable "docker_image" {
 }
 
 variable "rootfs_url" {
-  description = "Public URL to download the rootfs image"
+  description = "Public URL to download the rootfs image (leave empty to use architecture-specific default)"
   type        = string
-  default     = "https://bouvet-artifacts.s3.us-east-1.amazonaws.com/debian-devbox.ext4"
+  default     = ""
+}
+
+variable "architecture" {
+  description = "Target architecture: x86_64 or arm64"
+  type        = string
+  default     = "x86_64"
+
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.architecture)
+    error_message = "Architecture must be 'x86_64' or 'arm64'."
+  }
 }
 
 variable "allowed_ssh_cidrs" {

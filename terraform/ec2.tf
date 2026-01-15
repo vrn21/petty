@@ -11,15 +11,15 @@ resource "aws_instance" "bouvet" {
   ami                         = data.aws_ami.debian.id
   instance_type               = var.instance_type
 
-  # Use spot instance for cost savings (~70% cheaper than on-demand)
-  # WARNING: Spot instances can be interrupted with 2-minute notice
-  instance_market_options {
-    market_type = "spot"
-    spot_options {
-      instance_interruption_behavior = "terminate"
-      spot_instance_type             = "one-time"
-    }
-  }
+  # NOTE: Spot instances commented out - using on-demand for reliability
+  # Uncomment below for ~70% cost savings (but may have capacity delays)
+  # instance_market_options {
+  #   market_type = "spot"
+  #   spot_options {
+  #     instance_interruption_behavior = "terminate"
+  #     spot_instance_type             = "one-time"
+  #   }
+  # }
 
   key_name                    = var.ssh_key_name
   subnet_id                   = aws_subnet.public.id
@@ -41,7 +41,7 @@ resource "aws_instance" "bouvet" {
   # Bootstrap script
   user_data = templatefile("${path.module}/scripts/user-data.sh", {
     docker_image = var.docker_image
-    rootfs_url   = var.rootfs_url
+    rootfs_url   = local.rootfs_url
   })
 
   tags = {
