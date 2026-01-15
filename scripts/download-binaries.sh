@@ -79,11 +79,11 @@ echo "       Downloaded jailer ($(du -h jailer | cut -f1))"
 # -----------------------------------------------------------------------------
 echo "[2/3] Downloading kernel..."
 
-# Use fireactions kernel (more reliable)
+# Use AWS Firecracker official kernels (with vsock support)
 if [ "$ARCH" = "aarch64" ]; then
-    KERNEL_URL="https://storage.googleapis.com/fireactions/kernels/arm64/5.10/vmlinux"
+    KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.5/aarch64/vmlinux-5.10.186"
 else
-    KERNEL_URL="https://storage.googleapis.com/fireactions/kernels/amd64/5.10/vmlinux"
+    KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.5/x86_64/vmlinux-5.10.186"
 fi
 
 if ! curl -sSL -o vmlinux "$KERNEL_URL"; then
