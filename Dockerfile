@@ -44,8 +44,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 
 # Install build dependencies
-# Fix GPG errors by allowing unauthenticated packages (builder stage only)
-RUN apt-get update && apt-get install -y --no-install-recommends --allow-unauthenticated \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -69,8 +68,7 @@ RUN strip /app/target/release/bouvet-mcp
 # -----------------------------------------------------------------------------
 FROM debian:bookworm-slim AS fetcher
 
-# Fix GPG errors by allowing unauthenticated packages (fetcher stage only)
-RUN apt-get update && apt-get install -y --no-install-recommends --allow-unauthenticated \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -102,8 +100,7 @@ LABEL org.opencontainers.image.source="https://github.com/vrn21/bouvet"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Install runtime dependencies
-# Fix GPG errors by allowing unauthenticated packages
-RUN apt-get update && apt-get install -y --no-install-recommends --allow-unauthenticated \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     # SSL certificates
     ca-certificates \
     # Required for healthcheck and rootfs download

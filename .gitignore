@@ -38,5 +38,3 @@ config.toml
 terraform.tfvars
 terraform.tfvars.json
 .terraform.lock.hcl
-
-*.log
