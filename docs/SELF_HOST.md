@@ -4,46 +4,69 @@ Deploy Bouvet on your own infrastructure for secure, isolated code execution san
 
 ---
 
-## Overview
+## Quick Start (AWS)
 
-Bouvet requires a bare-metal machine with KVM support to run Firecracker microVMs. This guide covers two deployment options:
+Deploy to AWS in one command:
 
-| Method                                      | Best For                             | Complexity |
-| ------------------------------------------- | ------------------------------------ | ---------- |
-| [AWS Terraform](#aws-deployment)            | Production deployments               | Medium     |
-| [Manual Installation](#manual-installation) | Custom infrastructure, local servers | Low        |
+```bash
+cd terraform && terraform init && terraform apply -var="ssh_key_name=YOUR_KEY_NAME"
+```
 
----
+That's it. Wait ~5 minutes, then grab your endpoint:
 
-## Prerequisites
-
-### Hardware Requirements
-
-Bouvet uses Firecracker microVMs which require **hardware virtualization (KVM)**:
-
-| Requirement | Specification                                 |
-| ----------- | --------------------------------------------- |
-| **CPU**     | x86_64 or ARM64 with VT-x/AMD-V or equivalent |
-| **RAM**     | 4GB minimum (each sandbox uses ~256MB)        |
-| **Disk**    | 30GB+ for rootfs images and Docker            |
-| **KVM**     | `/dev/kvm` must be available                  |
-
-> [!IMPORTANT]
-> Cloud instances must be bare-metal (e.g., AWS `c5.metal`, `m5.metal`) — standard VMs don't expose `/dev/kvm`.
-
-### Software Requirements
-
-- Docker 20.10+
-- AWS CLI (for Terraform deployment)
-- Terraform 1.0+ (for Terraform deployment)
+```bash
+terraform output mcp_endpoint
+```
 
 ---
 
-## AWS Deployment
+## ARM64 / Graviton (Recommended)
 
-The included Terraform configuration deploys Bouvet on an AWS EC2 bare-metal instance.
+For AWS Graviton instances (better price/performance):
 
-### What Gets Created
+```bash
+terraform apply \
+  -var="ssh_key_name=YOUR_KEY_NAME" \
+  -var="instance_type=a1.metal" \
+  -var="architecture=arm64"
+```
+
+---
+
+## Custom Configuration
+
+### All Variables
+
+| Variable            | Description                          | Default                           |
+| ------------------- | ------------------------------------ | --------------------------------- |
+| `ssh_key_name`      | **Required.** AWS EC2 key pair name  | —                                 |
+| `aws_region`        | AWS region                           | `us-east-1`                       |
+| `availability_zone` | Availability zone                    | `us-east-1a`                      |
+| `instance_type`     | EC2 instance type (must be `.metal`) | `c5.metal`                        |
+| `architecture`      | Target architecture (`x86_64`/`arm64`) | `x86_64`                        |
+| `docker_image`      | Docker image for bouvet-mcp          | `ghcr.io/vrn21/bouvet-mcp:latest` |
+| `rootfs_url`        | Public URL for rootfs download       | Architecture-specific S3 URL      |
+| `allowed_ssh_cidrs` | CIDR blocks allowed for SSH          | `["0.0.0.0/0"]`                   |
+| `volume_size`       | Root EBS volume size (GB)            | `50`                              |
+| `environment`       | Environment tag                      | `production`                      |
+
+### Example: Restricted SSH + Larger Disk
+
+```bash
+terraform apply \
+  -var="ssh_key_name=my-key" \
+  -var="aws_region=eu-west-1" \
+  -var="allowed_ssh_cidrs=[\"YOUR_IP/32\"]" \
+  -var="volume_size=100"
+```
+
+### Enable Spot Instances (~70% Savings)
+
+Uncomment the `instance_market_options` block in `terraform/ec2.tf` for spot pricing.
+
+---
+
+## What Gets Deployed
 
 | Resource          | Description                           |
 | ----------------- | ------------------------------------- |
@@ -53,46 +76,9 @@ The included Terraform configuration deploys Bouvet on an AWS EC2 bare-metal ins
 | Elastic IP        | Static public IP address              |
 | Systemd Service   | Auto-starts/restarts bouvet-mcp       |
 
-### Quick Start
+---
 
-```bash
-cd terraform
-
-# Initialize Terraform
-terraform init
-
-# Review the plan (replace with your SSH key name)
-terraform plan -var="ssh_key_name=my-key"
-
-# Deploy
-terraform apply -var="ssh_key_name=my-key"
-```
-
-### Configuration Variables
-
-| Variable            | Description                          | Default                           |
-| ------------------- | ------------------------------------ | --------------------------------- |
-| `ssh_key_name`      | **Required.** AWS EC2 key pair name  | —                                 |
-| `aws_region`        | AWS region                           | `us-east-1`                       |
-| `availability_zone` | Availability zone                    | `us-east-1a`                      |
-| `instance_type`     | EC2 instance type (must be `.metal`) | `c5.metal`                        |
-| `docker_image`      | Docker image for bouvet-mcp          | `ghcr.io/vrn21/bouvet-mcp:latest` |
-| `rootfs_url`        | Public URL for rootfs download       | S3-hosted image                   |
-| `allowed_ssh_cidrs` | CIDR blocks allowed for SSH          | `["0.0.0.0/0"]`                   |
-| `volume_size`       | Root EBS volume size (GB)            | `50`                              |
-| `environment`       | Environment tag                      | `production`                      |
-
-Example with custom configuration:
-
-```bash
-terraform apply \
-  -var="ssh_key_name=my-key" \
-  -var="aws_region=eu-west-1" \
-  -var="allowed_ssh_cidrs=[\"203.0.113.0/24\"]" \
-  -var="volume_size=100"
-```
-
-### Verification
+## Verification
 
 After deployment (~5 minutes for first boot):
 
@@ -153,12 +139,27 @@ sudo chmod 666 /dev/kvm
 echo 'KERNEL=="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm.rules
 ```
 
-### 2. Install Docker
+### 2. Install Docker CE
 
 ```bash
-# Debian/Ubuntu
+# Debian/Ubuntu - Install Docker CE from official repository
 sudo apt-get update
-sudo apt-get install -y docker.io
+sudo apt-get install -y ca-certificates curl gnupg
+
+# Add Docker's official GPG key
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Add Docker repository
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Install Docker CE
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo systemctl enable docker
 sudo systemctl start docker
 ```
