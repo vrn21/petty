@@ -186,47 +186,71 @@ mod tests {
 
     #[test]
     fn test_validate_vcpu() {
-        let mut config = MachineConfig::default();
-        config.vcpu_count = 0;
+        let config = MachineConfig {
+            vcpu_count: 0,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
-        config.vcpu_count = 33;
+        let config = MachineConfig {
+            vcpu_count: 33,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
-        config.vcpu_count = 4;
+        let config = MachineConfig {
+            vcpu_count: 4,
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_validate_memory() {
-        let mut config = MachineConfig::default();
-        config.memory_mib = 64;
+        let config = MachineConfig {
+            memory_mib: 64,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
-        config.memory_mib = 128;
+        let config = MachineConfig {
+            memory_mib: 128,
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
 
         // Test upper bound
-        config.memory_mib = 32769;
+        let config = MachineConfig {
+            memory_mib: 32769,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
-        config.memory_mib = 32768;
+        let config = MachineConfig {
+            memory_mib: 32768,
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_validate_vsock_cid() {
-        let mut config = MachineConfig::default();
-        config.vsock = Some(VsockConfig {
-            guest_cid: 2,
-            uds_path: PathBuf::from("/tmp/test.sock"),
-        });
+        let config = MachineConfig {
+            vsock: Some(VsockConfig {
+                guest_cid: 2,
+                uds_path: PathBuf::from("/tmp/test.sock"),
+            }),
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
-        config.vsock = Some(VsockConfig {
-            guest_cid: 3,
-            uds_path: PathBuf::from("/tmp/test.sock"),
-        });
+        let config = MachineConfig {
+            vsock: Some(VsockConfig {
+                guest_cid: 3,
+                uds_path: PathBuf::from("/tmp/test.sock"),
+            }),
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
     }
 
