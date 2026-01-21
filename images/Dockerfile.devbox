@@ -65,6 +65,11 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     && rustup component add clippy rustfmt \
     && rm -rf /usr/local/rustup/toolchains/*/share/doc
 
+# === VSOCK MODULE LOADING ===
+RUN mkdir -p /etc/modules-load.d && \
+    echo "vsock" > /etc/modules-load.d/vsock.conf && \
+    echo "vmw_vsock_virtio_transport" >> /etc/modules-load.d/vsock.conf 
+
 # === bouvet AGENT ===
 COPY bouvet-agent /usr/local/bin/bouvet-agent
 RUN chmod +x /usr/local/bin/bouvet-agent
