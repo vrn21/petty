@@ -1,18 +1,20 @@
 [Unit]
 Description=Bouvet Guest Agent
 After=network.target
+After=systemd-modules-load.service
 
 [Service]
 Type=simple
+User=root
 ExecStart=/usr/local/bin/bouvet-agent
-Restart=always
-RestartSec=1
-StandardOutput=journal
-StandardError=journal
-
-# Security hardening (relaxed for agent file operations)
-NoNewPrivileges=true
-# Note: ProtectSystem and ProtectHome removed - agent needs write access
+Restart=on-failure
+RestartSec=2
+StartLimitIntervalSec=60
+StartLimitBurst=5
+StandardOutput=journal+console
+StandardError=journal+console
+Environment="RUST_LOG=debug"
+Environment="RUST_BACKTRACE=1"
 
 [Install]
 WantedBy=multi-user.target
