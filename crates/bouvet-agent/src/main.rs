@@ -17,39 +17,114 @@ use tracing::{debug, error, info, warn};
 /// Guest port that bouvet-agent listens on.
 const GUEST_PORT: u32 = 52;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize tracing
+fn main() {
+    // Early debug output (before any async/tracing setup)
+    eprintln!("[bouvet-agent] Starting (pid: {})", std::process::id());
+    eprintln!("[bouvet-agent] Building tokio runtime (current_thread for musl compatibility)...");
+
+    // Use current_thread runtime - more reliable on musl systems than multi_thread
+    // Multi-thread runtime can have issues with signal handling and thread spawning on musl
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => {
+            eprintln!("[bouvet-agent] Tokio current_thread runtime created successfully");
+            rt
+        }
+        Err(e) => {
+            eprintln!(
+                "[bouvet-agent] FATAL: Failed to create tokio runtime: {}",
+                e
+            );
+            std::process::exit(1);
+        }
+    };
+
+    // Run the async main
+    match runtime.block_on(async_main()) {
+        Ok(()) => {
+            eprintln!("[bouvet-agent] Agent exited normally");
+        }
+        Err(e) => {
+            eprintln!("[bouvet-agent] FATAL: Agent error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+async fn async_main() -> Result<(), Box<dyn std::error::Error>> {
+    eprintln!("[bouvet-agent] async_main started");
+    eprintln!("[bouvet-agent] Initializing tracing subscriber...");
+
+    // Initialize tracing - write to stderr so it shows in console
     tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
                 .add_directive("bouvet_agent=debug".parse().unwrap()),
         )
         .init();
 
+    eprintln!("[bouvet-agent] Tracing initialized, switching to structured logs");
     info!("bouvet-agent starting...");
 
+    // Check vsock device exists
+    eprintln!("[bouvet-agent] Checking /dev/vsock...");
+    if !std::path::Path::new("/dev/vsock").exists() {
+        let msg = "/dev/vsock does not exist - vsock kernel module may not be loaded";
+        eprintln!("[bouvet-agent] FATAL: {}", msg);
+        return Err(msg.into());
+    }
+    eprintln!("[bouvet-agent] /dev/vsock exists");
+
     // Create vsock listener on port 52 (accepts connections from any CID)
+    eprintln!(
+        "[bouvet-agent] Binding vsock listener on port {}...",
+        GUEST_PORT
+    );
     let addr = VsockAddr::new(VMADDR_CID_ANY, GUEST_PORT);
-    let listener = VsockListener::bind(addr)?;
+
+    let listener = match VsockListener::bind(addr) {
+        Ok(l) => {
+            eprintln!(
+                "[bouvet-agent] Successfully bound to vsock port {}",
+                GUEST_PORT
+            );
+            l
+        }
+        Err(e) => {
+            eprintln!("[bouvet-agent] FATAL: Failed to bind vsock: {}", e);
+            return Err(e.into());
+        }
+    };
+
     info!(port = GUEST_PORT, "listening on vsock");
+    eprintln!("[bouvet-agent] Entering accept loop - ready for connections");
 
     loop {
         match listener.accept().await {
             Ok((stream, peer_addr)) => {
+                eprintln!(
+                    "[bouvet-agent] Accepted connection from CID {} port {}",
+                    peer_addr.cid(),
+                    peer_addr.port()
+                );
                 debug!(
                     cid = peer_addr.cid(),
                     port = peer_addr.port(),
                     "accepted new connection"
                 );
-                tokio::spawn(async move {
-                    if let Err(e) = handle_connection(stream).await {
-                        warn!(error = %e, "connection error");
-                    }
-                });
+                // Handle connection in the same task (current_thread runtime)
+                // Using spawn_local would require LocalSet, so we handle inline
+                if let Err(e) = handle_connection(stream).await {
+                    warn!(error = %e, "connection error");
+                    eprintln!("[bouvet-agent] Connection error: {}", e);
+                }
             }
             Err(e) => {
                 error!(error = %e, "failed to accept connection");
+                eprintln!("[bouvet-agent] Accept error: {}", e);
             }
         }
     }
