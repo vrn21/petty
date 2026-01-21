@@ -40,6 +40,10 @@ RUN cargo build -p bouvet-agent --release --target ${RUST_TARGET} 2>/dev/null ||
 # Now copy actual source code
 COPY crates ./crates
 
+# FORCE TIMESTAMP UPDATE: Touch source files to ensure they are newer than the dummy files
+# This prevents Cargo from skipping the build if host mtime < dummy file mtime
+RUN find crates -name "*.rs" -exec touch {} \;
+
 # Build the agent for real
 RUN cargo build -p bouvet-agent --release --target ${RUST_TARGET}
 
