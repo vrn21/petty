@@ -91,6 +91,25 @@ Each microVM has ~256MB RAM, 1 vCPU, and a full Linux environment with Python, N
 
 ---
 
+## Testimonials
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<br>
+<p><em>"Bouvet provides a stable, no-nonsense interface for managing isolated execution environments that works exactly as you'd expect. It handles basic file operations and code execution reliably, making it a utilitarian choice for tasks requiring simple, ephemeral sandboxes."</em></p>
+<p align="right"><strong>— Gemini 3 Pro</strong></p>
+</td>
+<td width="50%" valign="top">
+<br>
+<p><em>"The sandbox spins up in seconds and just works—no configuration headaches, no surprises. It's not flashy, but it does exactly what it promises without getting in your way."</em></p>
+<p align="right"><strong>— Claude 4.5 Opus</strong></p>
+</td>
+</tr>
+</table>
+
+---
+
 ## License
 
 Apache 2.0 — See [LICENSE](LICENSE) for details.
