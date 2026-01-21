@@ -5,9 +5,10 @@
 # This script runs on first boot to configure the instance:
 # 1. Update system packages
 # 2. Install Docker
-# 3. Configure KVM permissions (persistent)
-# 4. Create systemd service for bouvet-mcp
-# 5. Start the service
+# 3. Configure KVM permissions
+# 4. Install and configure nginx as reverse proxy
+# 5. Create systemd service for bouvet-mcp
+# 6. Start the services
 #
 # Template variables (replaced by Terraform):
 #   - docker_image: Container image to pull
@@ -21,6 +22,9 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "=== Bouvet Bootstrap Started: $(date) ==="
 echo ""
+
+DOCKER_IMAGE="${docker_image}"
+ROOTFS_URL="${rootfs_url}"
 
 # -----------------------------------------------------------------------------
 # 1. Update system packages
@@ -86,10 +90,51 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# 4. Create systemd service
+# 4. Install and configure nginx
 # -----------------------------------------------------------------------------
-echo "[4/5] Creating systemd service..."
-cat > /etc/systemd/system/bouvet-mcp.service << 'SERVICEEOF'
+echo "[4/5] Installing and configuring nginx..."
+apt-get install -y nginx
+
+# Create nginx site configuration
+cat > /etc/nginx/sites-available/bouvet << 'NGINXEOF'
+# Bouvet MCP Server - nginx reverse proxy
+server {
+    listen 80;
+    server_name _;
+
+    # Proxy all requests to bouvet-mcp
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        
+        # Headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # SSE/streaming support (important for MCP)
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+    }
+}
+NGINXEOF
+
+# Enable site and remove default
+ln -sf /etc/nginx/sites-available/bouvet /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+
+# Test and start nginx
+nginx -t && systemctl enable nginx && systemctl start nginx
+echo "       nginx configured and started"
+
+# -----------------------------------------------------------------------------
+# 5. Create and start bouvet-mcp systemd service
+# -----------------------------------------------------------------------------
+echo "[5/5] Creating bouvet-mcp service..."
+cat > /etc/systemd/system/bouvet-mcp.service << SERVICEEOF
 [Unit]
 Description=Bouvet MCP Server
 After=network.target docker.service
@@ -101,22 +146,22 @@ Restart=on-failure
 RestartSec=10
 TimeoutStartSec=300
 
-ExecStartPre=/usr/bin/docker pull ${docker_image}
-ExecStart=/usr/bin/docker run --rm --name bouvet-mcp \
-    --privileged \
-    --device=/dev/kvm \
-    --security-opt seccomp=unconfined \
-    --security-opt apparmor=unconfined \
-    --cap-add=NET_ADMIN \
-    --cap-add=SYS_ADMIN \
-    -v /dev/kvm:/dev/kvm \
-    -p 8080:8080 \
-    -e BOUVET_ROOTFS_URL=${rootfs_url} \
-    -e BOUVET_TRANSPORT=both \
-    -e BOUVET_HTTP_HOST=0.0.0.0 \
-    -e BOUVET_HTTP_PORT=8080 \
-    -e RUST_LOG=info \
-    ${docker_image}
+ExecStartPre=/usr/bin/docker pull $DOCKER_IMAGE
+ExecStart=/usr/bin/docker run --rm --name bouvet-mcp \\
+    --privileged \\
+    --device=/dev/kvm \\
+    --security-opt seccomp=unconfined \\
+    --security-opt apparmor=unconfined \\
+    --cap-add=NET_ADMIN \\
+    --cap-add=SYS_ADMIN \\
+    -v /dev/kvm:/dev/kvm \\
+    -p 127.0.0.1:8080:8080 \\
+    -e BOUVET_ROOTFS_URL=$ROOTFS_URL \\
+    -e BOUVET_TRANSPORT=http \\
+    -e BOUVET_HTTP_HOST=0.0.0.0 \\
+    -e BOUVET_HTTP_PORT=8080 \\
+    -e RUST_LOG=info \\
+    $DOCKER_IMAGE
 
 ExecStop=/usr/bin/docker stop bouvet-mcp
 
@@ -124,19 +169,25 @@ ExecStop=/usr/bin/docker stop bouvet-mcp
 WantedBy=multi-user.target
 SERVICEEOF
 
-echo "       Systemd service created"
-
-# -----------------------------------------------------------------------------
-# 5. Enable and start service
-# -----------------------------------------------------------------------------
-echo "[5/5] Starting bouvet-mcp service..."
 systemctl daemon-reload
 systemctl enable bouvet-mcp
 systemctl start bouvet-mcp
 
+echo "       bouvet-mcp service created and started"
+
+# Get public IP for output
+PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 || echo "unknown")
+
 echo ""
 echo "=== Bouvet Bootstrap Complete: $(date) ==="
 echo ""
-echo "Service status: $(systemctl is-active bouvet-mcp)"
+echo "MCP Endpoint: http://$PUBLIC_IP/mcp"
+echo "Health Check: http://$PUBLIC_IP/health"
+echo ""
 echo "View logs: journalctl -u bouvet-mcp -f"
+echo ""
+echo "To add HTTPS later:"
+echo "  1. Point your domain to $PUBLIC_IP"
+echo "  2. Run: sudo apt install certbot python3-certbot-nginx"
+echo "  3. Run: sudo certbot --nginx -d yourdomain.com"
 echo ""

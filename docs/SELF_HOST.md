@@ -72,8 +72,9 @@ Uncomment the `instance_market_options` block in `terraform/ec2.tf` for spot pri
 | ----------------- | ------------------------------------- |
 | VPC + Subnet      | Isolated network with internet access |
 | c5.metal Instance | Bare-metal EC2 with KVM support       |
-| Security Group    | SSH (22) + MCP endpoint (8080)        |
+| Security Group    | SSH (22) + HTTP (80) + HTTPS (443)    |
 | Elastic IP        | Static public IP address              |
+| nginx             | Reverse proxy on port 80              |
 | Systemd Service   | Auto-starts/restarts bouvet-mcp       |
 
 ---
@@ -87,10 +88,10 @@ After deployment (~5 minutes for first boot):
 PUBLIC_IP=$(terraform output -raw public_ip)
 
 # Check health endpoint
-curl -f http://$PUBLIC_IP:8080/health
+curl -f http://$PUBLIC_IP/health
 
 # Test MCP endpoint
-curl -X POST http://$PUBLIC_IP:8080/mcp \
+curl -X POST http://$PUBLIC_IP/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 
@@ -342,7 +343,7 @@ aws s3 cp images/output/debian-devbox.ext4 s3://my-bouvet-artifacts/
 ### Network Security
 
 - **Restrict SSH Access**: Set `allowed_ssh_cidrs` to your IP range
-- **Use HTTPS**: Place a reverse proxy (nginx, Caddy) with TLS in front of port 8080
+- **HTTPS**: nginx is included; add SSL with `certbot --nginx -d yourdomain.com`
 - **VPC Peering**: For internal-only access, keep the MCP endpoint private
 
 ### Container Security
@@ -356,9 +357,10 @@ The container runs as root to access `/dev/kvm`, but:
 ### Firewall Rules
 
 ```bash
-# Allow only MCP endpoint and SSH
+# Allow HTTP, HTTPS, and SSH
 sudo ufw allow 22/tcp
-sudo ufw allow 8080/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
 sudo ufw enable
 ```
 

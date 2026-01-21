@@ -26,10 +26,10 @@ output "ssh_command" {
 
 output "mcp_endpoint" {
   description = "MCP HTTP endpoint URL"
-  value       = "http://${aws_eip.bouvet.public_ip}:8080/mcp"
+  value       = "http://${aws_eip.bouvet.public_ip}/mcp"
 }
 
 output "health_url" {
   description = "Health check URL"
-  value       = "http://${aws_eip.bouvet.public_ip}:8080/health"
+  value       = "http://${aws_eip.bouvet.public_ip}/health"
 }

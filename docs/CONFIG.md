@@ -187,7 +187,7 @@ remote HTTP:
 {
   "mcpServers": {
     "bouvet": {
-      "url": "http://your-server-ip:8080/mcp"
+      "url": "http://your-server-ip/mcp"
     }
   }
 }

@@ -18,11 +18,20 @@ resource "aws_security_group" "bouvet_mcp" {
     cidr_blocks = var.allowed_ssh_cidrs
   }
 
-  # MCP HTTP endpoint
+  # HTTP
   ingress {
-    description = "MCP HTTP endpoint"
-    from_port   = 8080
-    to_port     = 8080
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # HTTPS (for when user adds SSL later)
+  ingress {
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
