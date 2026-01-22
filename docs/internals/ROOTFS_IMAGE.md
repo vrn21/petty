@@ -1,74 +1,155 @@
 # Rootfs Image Architecture
 
 > **Layer**: 1.5 (Between Firecracker and VM — the disk image)  
-> **Related Code**: [`images/`](file:///Users/vrn21/Developer/rust/petty/images) directory, Dockerfile rootfs build
+> **Related Code**: [`images/`](file:///Users/vrn21/Developer/rust/petty/images/) directory, [Makefile](file:///Users/vrn21/Developer/rust/petty/Makefile)
 
-This document covers the ext4 rootfs image that boots inside Firecracker microVMs.
-
----
-
-## 1. Base Image
-
-### Distribution
-- **Base**: Debian Bookworm (`debian:bookworm-slim`)
-- **filesystem**: ext4 with journal
-- **Label**: `bouvet-rootfs`
-
-### Size Constraints
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Initial allocation | 2500M | Maximum size before optimization |
-| Final size | ~700-900MB | After `resize2fs -M` shrinking |
-| Runtime growth | Dynamic | Image grows as files are written |
-
-### Optimization Techniques
-1. `apt-get clean` — Remove package cache
-2. Remove `/usr/share/doc`, `/usr/share/man`, `/usr/share/info`
-3. Truncate all logs in `/var/log`
-4. Run `resize2fs -M` to shrink to minimum blocks
-5. Docker multi-stage builds to minimize layers
+This document describes the ext4 rootfs image that boots inside Firecracker microVMs. The rootfs is a complete Linux filesystem containing the guest operating system, pre-installed runtimes, and the bouvet-agent.
 
 ---
 
-## 2. Pre-installed Runtimes
+## Base Image
 
-| Runtime | Version | Binary Path | Purpose |
-|---------|---------|-------------|---------|
-| Python | 3.11+ | `/usr/bin/python3` | Code execution |
-| Node.js | 20.x | `/usr/bin/node` | JavaScript execution |
-| Bash | 5.x | `/bin/bash` | Shell commands |
-| Rust | stable | `/usr/local/cargo/bin/rustc` | Rust compilation |
+### Debian Bookworm Slim
 
-### Additional Development Tools
-- **Build**: `build-essential`, `pkg-config`, `cmake`, `clang`
-- **Debug**: `strace`, `gdb`
-- **Network**: `curl`, `wget`, `iproute2`, `dnsutils`
-- **Utilities**: `git`, `vim`, `jq`, `htop`, `tree`
-
-### Runtime Installation Details
+The rootfs is built on **Debian Bookworm (12) slim** as the base:
 
 ```dockerfile
-# Python (from Debian repos)
-python3, python3-pip, python3-venv, python3-dev
-
-# Node.js (from NodeSource)
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-
-# Rust (via rustup)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+FROM debian:bookworm-slim
 ```
+
+| Property | Value | Rationale |
+|----------|-------|-----------|
+| Distribution | Debian 12 (Bookworm) | Stable, well-tested, large package ecosystem |
+| Variant | `slim` | Reduced size by excluding docs and man pages |
+| Architecture | aarch64 or x86_64 | Matches host architecture |
+
+> [!NOTE]
+> Debian Bookworm was chosen over Bullseye for newer package versions, particularly Node.js 20.x support and Python 3.11.
+
+### Size Constraints and Optimization
+
+The rootfs image is optimized for minimal disk footprint:
+
+| Optimization | Implementation |
+|--------------|----------------|
+| Remove documentation | `rm -rf /usr/share/doc /usr/share/man /usr/share/info` |
+| Clean apt cache | `apt-get clean && rm -rf /var/cache/apt/*` |
+| Truncate logs | `find /var/log -type f -exec truncate -s 0 {} \;` |
+| Remove temp files | `rm -rf /tmp/* /var/tmp/*` |
+| Strip Rust docs | `rm -rf /usr/local/rustup/toolchains/*/share/doc` |
+| npm cache clear | `npm cache clean --force` |
+
+Final image size: **~800MB** (after `resize2fs -M` shrinks to minimum)
+
+### ext4 Filesystem Layout
+
+The rootfs uses the ext4 filesystem format:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                 debian-devbox.ext4                   │
+├─────────────────────────────────────────────────────┤
+│  Label: bouvet-rootfs                                │
+│  Type:  ext4                                         │
+│  Build: mke2fs -t ext4 -d <rootfs_dir>              │
+└─────────────────────────────────────────────────────┘
+         │
+         ├── /bin, /sbin, /usr/bin     # System binaries
+         ├── /lib, /lib64              # System libraries  
+         ├── /etc                      # Configuration
+         ├── /usr/local/bin            # bouvet-agent
+         ├── /usr/local/cargo/bin      # Rust toolchain
+         └── /root                     # Root home (workdir)
+```
+
+Key filesystem entries:
+
+| Path | Purpose |
+|------|---------|
+| `/etc/fstab` | Contains `/dev/vda / ext4 defaults 0 1` |
+| `/etc/hostname` | Set to `bouvet` |
+| `/etc/network/interfaces` | Auto DHCP on eth0 |
 
 ---
 
-## 3. Agent Installation
+## Pre-installed Runtimes
+
+The devbox image includes multiple language runtimes for code execution:
+
+| Runtime | Version | Binary Path | Package Source |
+|---------|---------|-------------|----------------|
+| Python | 3.11 | `/usr/bin/python3` | Debian apt |
+| Node.js | 20.x | `/usr/bin/node` | NodeSource repository |
+| Bash | 5.2 | `/bin/bash` | Debian apt |
+| Rust | stable | `/usr/local/cargo/bin/rustc` | rustup installer |
+
+### Python Environment
+
+```dockerfile
+RUN apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev
+    
+# Symlink for convenience
+RUN ln -sf /usr/bin/python3 /usr/bin/python
+```
+
+### Node.js Environment
+
+```dockerfile
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g npm@latest
+```
+
+### Rust Environment
+
+```dockerfile
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain stable --profile minimal \
+    && rustup component add clippy rustfmt
+```
+
+### Additional Development Tools
+
+| Category | Packages |
+|----------|----------|
+| Build essentials | `build-essential`, `pkg-config`, `cmake`, `clang` |
+| Networking | `curl`, `wget`, `openssh-client`, `ca-certificates` |
+| Version control | `git` |
+| Utilities | `vim`, `nano`, `less`, `tree`, `htop`, `jq` |
+| Debugging | `strace`, `gdb` |
+| Compression | `zip`, `unzip`, `xz-utils` |
+
+---
+
+## Agent Installation
 
 ### Binary Location
-- **Path**: `/usr/local/bin/bouvet-agent`
-- **Permissions**: Executable (`chmod +x`)
-- **Compilation**: Static musl binary (no runtime deps)
+
+The bouvet-agent binary is installed at:
+
+```
+/usr/local/bin/bouvet-agent
+```
+
+The agent is cross-compiled for the target architecture using musl libc for maximum compatibility:
+
+```dockerfile
+# From Dockerfile.devbox
+COPY bouvet-agent /usr/local/bin/bouvet-agent
+RUN chmod +x /usr/local/bin/bouvet-agent
+```
 
 ### Systemd Service
-- **File**: [`/etc/systemd/system/bouvet-agent.service`](file:///Users/vrn21/Developer/rust/petty/images/bouvet-agent.service)
+
+The agent runs as a systemd service defined in [`bouvet-agent.service`](file:///Users/vrn21/Developer/rust/petty/images/bouvet-agent.service):
 
 ```ini
 [Unit]
@@ -93,218 +174,291 @@ Environment="RUST_BACKTRACE=1"
 WantedBy=multi-user.target
 ```
 
-### Configuration
-| Setting | Value | Reason |
-|---------|-------|--------|
-| Type | `simple` | No forking, agent runs in foreground |
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| Type | `simple` | Agent doesn't fork (stays in foreground) |
 | User | `root` | Required for vsock access |
-| Restart | `on-failure` | Auto-restart on crash |
-| RestartSec | `2s` | Wait before restart |
-| Rate limit | 5 in 60s | Prevent restart loops |
+| Restart | `on-failure` | Auto-restart on crashes |
+| RestartSec | `2` | 2-second delay between restarts |
+| StartLimitBurst | `5` | Max 5 restarts per 60 seconds |
+
+### Service Enablement
+
+The service is enabled via symlink during image build:
+
+```dockerfile
+RUN mkdir -p /etc/systemd/system/multi-user.target.wants && \
+    ln -sf /etc/systemd/system/bouvet-agent.service \
+    /etc/systemd/system/multi-user.target.wants/bouvet-agent.service
+```
 
 ---
 
-## 4. Boot Sequence
+## Boot Sequence
+
+The complete boot sequence from Firecracker start to agent ready:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ 1. Firecracker loads vmlinux kernel                         │
-│    └─ Kernel image: /var/lib/bouvet/vmlinux                │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 2. Kernel mounts rootfs.ext4 as /                           │
-│    └─ Mount: /dev/vda → / (ext4, defaults)                 │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 3. systemd starts as PID 1                                  │
-│    └─ CMD ["/sbin/init"]                                   │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 4. Kernel modules loaded                                    │
-│    └─ vsock, vmw_vsock_virtio_transport                    │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 5. bouvet-agent.service starts                              │
-│    └─ After: network.target, systemd-modules-load.service  │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 6. Agent binds vsock port 52                                │
-│    └─ VsockListener::bind(VMADDR_CID_ANY, 52)              │
-└─────────────────────────────────────────────────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 7. Agent ready for host connections                         │
-│    └─ Logs: "listening on vsock port 52"                   │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                        Boot Sequence                              │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  1. Firecracker loads vmlinux kernel                             │
+│     └── Kernel version: 5.10 (from AWS S3)                       │
+│                                                                   │
+│  2. Kernel mounts rootfs.ext4                                    │
+│     └── Mount point: / (root filesystem)                         │
+│     └── Device: /dev/vda (Firecracker virtio-blk)                │
+│                                                                   │
+│  3. systemd starts as PID 1                                      │
+│     └── CMD ["/sbin/init"]                                       │
+│                                                                   │
+│  4. systemd-modules-load.service runs                            │
+│     └── Loads modules from /etc/modules-load.d/vsock.conf:       │
+│         • vsock                                                   │
+│         • vmw_vsock_virtio_transport                             │
+│                                                                   │
+│  5. bouvet-agent.service starts                                  │
+│     └── ExecStart=/usr/local/bin/bouvet-agent                    │
+│                                                                   │
+│  6. Agent binds vsock port 52                                    │
+│     └── VsockListener::bind(VsockAddr::new(VMADDR_CID_ANY, 52))  │
+│                                                                   │
+│  7. Agent ready for host connections                             │
+│     └── Host connects via /tmp/bouvet/{vm-id}/v.sock             │
+│                                                                   │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ### Boot Time
-- **Cold boot**: ~300-500ms (kernel → agent ready)
-- **Agent bind**: <50ms after systemd starts service
+
+| Phase | Duration | Notes |
+|-------|----------|-------|
+| Firecracker start | ~50ms | VM creation and kernel load |
+| Kernel boot | ~200ms | Linux kernel initialization |
+| systemd init | ~150ms | Service manager startup |
+| Agent ready | ~100ms | vsock bind and listen |
+| **Total** | **~500ms** | Cold start time |
+
+> [!TIP]
+> The warm pool reduces effective startup time to ~150ms by pre-booting sandboxes.
 
 ---
 
-## 5. Build Process
+## Build Process
 
-The rootfs is built through a 3-stage Docker pipeline:
+The rootfs build is a multi-stage process orchestrated by the [Makefile](file:///Users/vrn21/Developer/rust/petty/Makefile):
 
-```mermaid
-flowchart TD
-    A["Dockerfile.agent<br/>(Cross-compile)"] --> B["bouvet-agent binary"]
-    B --> C["Dockerfile.devbox<br/>(Debian + runtimes)"]
-    C --> D["Docker export"]
-    D --> E["rootfs.tar"]
-    E --> F["Dockerfile.ext4<br/>(mke2fs + resize2fs)"]
-    F --> G["debian-devbox.ext4"]
+### Build Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Build Pipeline                               │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  make rootfs                                                         │
+│      │                                                               │
+│      ▼                                                               │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │ Stage 1: Cross-compile bouvet-agent (Dockerfile.agent)         │ │
+│  │   • Uses rust:slim-bookworm + musl-tools                       │ │
+│  │   • Target: aarch64-unknown-linux-musl (or x86_64)             │ │
+│  │   • Output: images/output/bouvet-agent                         │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│      │                                                               │
+│      ▼                                                               │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │ Stage 2: Build devbox Docker image (Dockerfile.devbox)        │ │
+│  │   • Debian Bookworm slim base                                  │ │
+│  │   • Install Python, Node.js, Rust, dev tools                   │ │
+│  │   • COPY bouvet-agent → /usr/local/bin/                       │ │
+│  │   • COPY bouvet-agent.service → /etc/systemd/system/          │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│      │                                                               │
+│      ▼                                                               │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │ Stage 3: Export Docker image as tarball                       │ │
+│  │   • docker create --name bouvet-export-temp                    │ │
+│  │   • docker export bouvet-export-temp > rootfs.tar              │ │
+│  │   • Output: images/output/rootfs.tar                           │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│      │                                                               │
+│      ▼                                                               │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │ Stage 4: Convert to ext4 (Dockerfile.ext4)                    │ │
+│  │   • Extract rootfs.tar to /rootfs directory                   │ │
+│  │   • mke2fs -t ext4 -d /rootfs rootfs.ext4                     │ │
+│  │   • e2fsck -f -y && resize2fs -M (shrink to minimum)          │ │
+│  │   • Output: images/output/debian-devbox.ext4                   │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Stage 1: Agent Compilation ([Dockerfile.agent](file:///Users/vrn21/Developer/rust/petty/images/Dockerfile.agent))
+### Cross-Compilation for aarch64/x86_64
 
-Cross-compiles the bouvet-agent for Linux musl target:
+The build supports both architectures via Docker platform flags:
 
-```bash
-# Build agent via Docker (works on macOS)
-make agent ARCH=aarch64  # or x86_64
+```makefile
+ARCH ?= aarch64
+
+ifeq ($(ARCH),aarch64)
+    RUST_TARGET := aarch64-unknown-linux-musl
+    DOCKER_PLATFORM := linux/arm64
+else ifeq ($(ARCH),x86_64)
+    RUST_TARGET := x86_64-unknown-linux-musl
+    DOCKER_PLATFORM := linux/amd64
+endif
 ```
 
-| Target | Rust Triple | Docker Platform |
-|--------|-------------|-----------------|
-| ARM64 | `aarch64-unknown-linux-musl` | `linux/arm64` |
-| x86_64 | `x86_64-unknown-linux-musl` | `linux/amd64` |
-
-### Stage 2: Devbox Image ([Dockerfile.devbox](file:///Users/vrn21/Developer/rust/petty/images/Dockerfile.devbox))
-
-Builds the full development environment:
-
-1. Install Debian base packages
-2. Add Python 3, Node.js 20, Rust
-3. Configure vsock module loading
-4. Copy bouvet-agent binary
-5. Install systemd service
-6. Configure network (`eth0` via DHCP)
-7. Set up serial console
-
-### Stage 3: ext4 Conversion ([Dockerfile.ext4](file:///Users/vrn21/Developer/rust/petty/images/Dockerfile.ext4))
-
-Converts Docker image to ext4 filesystem:
+Building for a specific architecture:
 
 ```bash
-# Extract Docker image to tarball
-docker export container > rootfs.tar
+# ARM64 (default for Apple Silicon)
+make rootfs ARCH=aarch64
 
-# Create ext4 from directory (no mount needed)
-mke2fs -t ext4 -d /rootfs -L "bouvet-rootfs" /rootfs.ext4 2500M
+# x86_64
+make rootfs ARCH=x86_64
+```
+
+### Agent Cross-Compilation
+
+The [Dockerfile.agent](file:///Users/vrn21/Developer/rust/petty/images/Dockerfile.agent) handles cross-compilation:
+
+```dockerfile
+FROM rust:slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    musl-tools \
+    musl-dev
+
+ARG RUST_TARGET=aarch64-unknown-linux-musl
+RUN rustup target add ${RUST_TARGET}
+
+# Build with musl for static linking
+RUN cargo build -p bouvet-agent --release --target ${RUST_TARGET}
+```
+
+| Feature | Benefit |
+|---------|---------|
+| musl libc | Statically linked, no glibc dependency |
+| Docker QEMU | Transparent ARM64/x86_64 emulation |
+| Multi-stage | Minimal output (binary only) |
+
+### ext4 Creation (Dockerfile.ext4)
+
+The [Dockerfile.ext4](file:///Users/vrn21/Developer/rust/petty/images/Dockerfile.ext4) converts the tarball to ext4:
+
+```dockerfile
+FROM debian:bookworm-slim AS builder
+
+RUN apt-get install -y --no-install-recommends e2fsprogs
+
+ARG IMAGE_SIZE=1500M
+ARG IMAGE_LABEL=bouvet-rootfs
+
+# Create ext4 directly from directory (no mount needed)
+RUN mke2fs -t ext4 -d /rootfs -L "${IMAGE_LABEL}" /rootfs.ext4 "${IMAGE_SIZE}"
 
 # Shrink to minimum size
-e2fsck -f -y /rootfs.ext4
-resize2fs -M /rootfs.ext4
+RUN e2fsck -f -y /rootfs.ext4 || true
+RUN resize2fs -M /rootfs.ext4
 ```
 
-### Full Build Command
+> [!IMPORTANT]
+> Using `mke2fs -d` allows creating an ext4 filesystem from a directory without requiring mount privileges. This enables building on macOS through Docker.
 
-```bash
-# Build for ARM64 (default on Apple Silicon)
-make rootfs
+### Image Size Optimization
 
-# Build for x86_64
-make rootfs ARCH=x86_64
-
-# Custom image size
-make rootfs IMAGE_SIZE=4G
-```
-
-### Output
-- **File**: `images/output/debian-devbox.ext4`
-- **Size**: ~700-900MB (after shrinking)
+| Technique | Command | Savings |
+|-----------|---------|---------|
+| Initial overallocation | `IMAGE_SIZE=1500M` | Ensures space for all files |
+| Filesystem check | `e2fsck -f -y` | Fixes any issues before resize |
+| Shrink to minimum | `resize2fs -M` | Removes unused blocks |
 
 ---
 
-## 6. Filesystem Layout
+## vsock Module Loading
 
-```
-/
-├── bin/                    # Essential binaries (bash, etc.)
-├── dev/
-│   └── vsock              # vsock device node
-├── etc/
-│   ├── fstab              # /dev/vda / ext4 defaults 0 1
-│   ├── hostname           # "bouvet"
-│   ├── modules-load.d/
-│   │   └── vsock.conf     # vsock, vmw_vsock_virtio_transport
-│   ├── network/
-│   │   └── interfaces     # eth0 dhcp config
-│   └── systemd/
-│       └── system/
-│           └── bouvet-agent.service
-├── root/                   # Root user home
-├── tmp/                    # Temp files, code execution
-├── usr/
-│   ├── bin/
-│   │   ├── python3 → python
-│   │   └── node
-│   └── local/
-│       ├── bin/
-│       │   └── bouvet-agent
-│       ├── cargo/         # Rust cargo
-│       └── rustup/        # Rust toolchains
-└── var/
-    └── log/               # System logs (truncated)
+The rootfs is configured to automatically load vsock kernel modules at boot:
+
+```dockerfile
+RUN mkdir -p /etc/modules-load.d && \
+    echo "vsock" > /etc/modules-load.d/vsock.conf && \
+    echo "vmw_vsock_virtio_transport" >> /etc/modules-load.d/vsock.conf
 ```
 
----
-
-## 7. vsock Configuration
-
-### Module Loading
-The rootfs pre-configures vsock modules to load at boot:
-
-```bash
-# /etc/modules-load.d/vsock.conf
+This creates `/etc/modules-load.d/vsock.conf` containing:
+```
 vsock
 vmw_vsock_virtio_transport
 ```
 
-### Device Verification
-At boot, the agent verifies `/dev/vsock` exists:
-
-```rust
-if !std::path::Path::new("/dev/vsock").exists() {
-    return Err("/dev/vsock does not exist - vsock kernel module may not be loaded");
-}
-```
+These modules are loaded by `systemd-modules-load.service` before the agent starts.
 
 ---
 
-## 8. Network Configuration
+## Serial Console
 
-### Interfaces
-```
-# /etc/network/interfaces
-auto lo
-iface lo inet loopback
+A serial console is enabled for debugging:
 
-auto eth0
-iface eth0 inet dhcp
+```dockerfile
+RUN mkdir -p /etc/systemd/system/getty.target.wants && \
+    ln -sf /lib/systemd/system/serial-getty@.service \
+    /etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service
 ```
 
-### Note
-Network is configured but **not used** for host-guest communication. All communication happens via vsock, which is faster and more secure.
+This allows connecting to the VM console via Firecracker's serial socket for debugging boot issues.
 
 ---
 
-## 9. Security Considerations
+## Root User
 
-| Aspect | Status | Notes |
-|--------|--------|-------|
-| Root password | `root:root` | Development convenience |
-| Agent runs as | `root` | Required for vsock + file ops |
-| Network isolation | Full | No inbound network access |
-| vsock only | Yes | Single communication channel |
+The root password is set to `root` for debugging access:
+
+```dockerfile
+RUN echo 'root:root' | chpasswd
+```
 
 > [!WARNING]
-> The default root password is for development only. In production, consider disabling password auth or using a random password per instance.
+> This is intentional for development. The VM is isolated by Firecracker's security boundary, and the sandbox is ephemeral.
+
+---
+
+## Output Artifacts
+
+After building, the following files are created in `images/output/`:
+
+| File | Size | Description |
+|------|------|-------------|
+| `bouvet-agent` | ~3 MB | Statically linked Linux binary |
+| `rootfs.tar` | ~1.2 GB | Intermediate tarball (deleted after build) |
+| `debian-devbox.ext4` | ~800 MB | Final ext4 filesystem image |
+
+---
+
+## Makefile Targets
+
+| Target | Command | Description |
+|--------|---------|-------------|
+| `rootfs` | `make rootfs` | Build complete ext4 image (default) |
+| `agent` | `make agent` | Cross-compile agent only |
+| `docker-image` | `make docker-image` | Build Docker image (no ext4) |
+| `clean` | `make clean` | Remove all build artifacts |
+| `rebuild` | `make rebuild` | Force clean rebuild |
+
+Configuration variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ARCH` | `aarch64` | Target architecture |
+| `IMAGE_SIZE` | `2500M` | Initial ext4 size (shrunk later) |
+| `IMAGE_NAME` | `bouvet-devbox` | Docker image name |
+
+---
+
+## See Also
+
+- [AGENT_INTERNALS.md](file:///Users/vrn21/Developer/rust/petty/docs/internals/AGENT_INTERNALS.md) — Agent implementation details
+- [VM_LAYER.md](file:///Users/vrn21/Developer/rust/petty/docs/internals/VM_LAYER.md) — Firecracker wrapper documentation
+- [VSOCK_COMMUNICATION.md](file:///Users/vrn21/Developer/rust/petty/docs/internals/VSOCK_COMMUNICATION.md) — Host-guest communication
