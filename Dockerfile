@@ -1,5 +1,5 @@
 # =============================================================================
-# Dockerfile.server - Production Docker Image for bouvet-mcp
+# Dockerfile - Production Docker Image for bouvet-mcp
 # =============================================================================
 # This Dockerfile creates a production-ready image containing:
 # - bouvet-mcp server binary (compiled from source)
@@ -10,7 +10,7 @@
 # The rootfs image is NOT included - it is fetched from S3 at runtime.
 #
 # Usage:
-#   docker build -f Dockerfile.server -t bouvet-mcp:latest .
+#   docker build -f Dockerfile -t bouvet-mcp:latest .
 #   docker run -d --privileged --security-opt seccomp=unconfined -p 8080:8080 \
 #     -e BOUVET_ROOTFS_URL=s3://your-bucket/debian-devbox.ext4 \
 #     bouvet-mcp:latest

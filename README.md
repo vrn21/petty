@@ -117,5 +117,5 @@ Apache 2.0 — See [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  Built with 🔥 Firecracker and 🦀 Rust
+  Built with 🧨 Firecracker and 🦀 Rust
 </p>
