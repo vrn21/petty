@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License" />
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" />
   <img src="https://img.shields.io/badge/rust-nightly-orange.svg" alt="Rust" />
   <img src="https://img.shields.io/badge/firecracker-1.5-red.svg" alt="Firecracker" />
   <a href="https://deepwiki.com/vrn21/bouvet"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
@@ -26,7 +26,7 @@
 
 ## What is Bouvet?
 
-Bouvet ("boo-veh") is an MCP server that creates secure, isolated sandboxes for AI agents to execute code.
+Bouvet (boo-veh) is an MCP server that creates secure, isolated sandboxes for AI agents to execute code.
 
 When an AI agent needs to run Python, Node.js, or shell commands, Bouvet spins up a lightweight microVM in ~200ms. The code runs in complete isolation separate kernel filesystem and network then the sandbox is destroyed. Nothing persists, nothing leaks.
 
@@ -110,9 +110,17 @@ Each microVM has ~256MB RAM, 1 vCPU, and a full Linux environment with Python, N
 
 ---
 
+## Behind the name: Bouvet (boo-veh)
+
+Everything began with a single, uncompromising promise: absolute isolation. In an ecosystem where code execution is often messy, shared, and persistent, we wanted to create a void a perfect, ephemeral vacuum where software could live for a moment and then disappear without a trace.
+
+This pursuit of solitude brought us to <a href="https://en.wikipedia.org/wiki/Bouvet_Island">Bouvet Island</a>, it is one of the most remote places on Earth uninhabited, untouched, and thousands of miles from civilization. It is the physical embodiment of what we've built in software: a harsh, beautiful, and completely isolated environment where nothing comes in, and nothing leaves.
+
+---
+
 ## License
 
-Apache 2.0 — See [LICENSE](LICENSE) for details.
+MIT — See [LICENSE](LICENSE) for details.
 
 ---
 
